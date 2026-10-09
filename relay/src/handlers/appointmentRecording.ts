@@ -37,6 +37,7 @@ export async function answerRecordingChoice(
     });
     convo.recordingConsentId = consent.consent_id;
   }
+  convo.pendingPlace = undefined;
   convo.stage = "recording";
   if (!ctx.relay.simulatesRecording) {
     await say(ctx, convo, copy.sendVoiceMemo());

@@ -30,6 +30,14 @@ export interface Conversation {
   recordingRef?: string;
   claimId?: string;
   reportSent?: boolean;
+  chatId?: string;
+  locationAsked?: boolean;
+  locationSharing?: boolean;
+  wantRecording?: boolean;
+  lastHospitalName?: string;
+  lastHospitalPromptAt?: number;
+  /** A pin that arrived while another question was on screen. Checked once that question is done. */
+  pendingPlace?: { latitude: number; longitude: number };
   /** Core notifications already shown to the patient (rendered exactly once). */
   delivered: Record<string, DeliveredNotification>;
 }

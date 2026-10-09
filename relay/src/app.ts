@@ -9,6 +9,7 @@ import type { HandlerContext } from "./handlers/context";
 import { handleIncoming } from "./handlers/incomingMessage";
 import { onCoreNotify, type CoreNotifyPayload } from "./handlers/humanHandoff";
 import { LiveTranscriber, MockTranscriber } from "./handlers/transcription";
+import { findNearbyHospital } from "./places/hospitals";
 import { LiveRelayAdapter } from "./relayAdapter/live";
 import { MockRelayAdapter } from "./relayAdapter/mock";
 import { ConversationStore } from "./store";
@@ -28,6 +29,7 @@ export function createContext(config: RelayConfig, overrides: Partial<HandlerCon
     store: new ConversationStore(join(config.dataDir, "conversations.json")),
     patientTokens: new Map<string, string>(),
     transcriber: relay.simulatesRecording ? new MockTranscriber() : new LiveTranscriber(config.xaiApiKey, config.xaiSttUrl),
+    findHospital: findNearbyHospital,
     log: (message) => console.log(`[relay] ${message}`),
     ...overrides,
   };

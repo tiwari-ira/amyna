@@ -60,7 +60,14 @@ export function verifyPlatformSignature(
   }
 }
 
-export type InboundKind = "message" | "button" | "recording" | "ignored";
+export type InboundKind = "message" | "button" | "recording" | "location_share" | "ignored";
+
+export interface InboundPlace {
+  latitude: number;
+  longitude: number;
+  name?: string;
+  address?: string;
+}
 
 export interface InboundEvent {
   id: string;
@@ -69,6 +76,9 @@ export interface InboundEvent {
   text?: string;
   buttonId?: string;
   recordingUrl?: string;
+  chatId?: string;
+  place?: InboundPlace;
+  locationShare?: "live" | "ended";
   /** An audio attachment (voice memo). `url` is a signed credential: never log it. */
   audio?: InboundAudio;
 }
@@ -86,6 +96,9 @@ interface RelayEnvelope {
   event_id?: string;
   data?: {
     direction?: string;
+    chat_id?: string;
+    chat?: { id?: string };
+    handle?: string;
     sender_handle?: { handle?: string };
     parts?: {
       type?: string;
@@ -95,17 +108,56 @@ interface RelayEnvelope {
       mime_type?: string;
       duration_ms?: number | null;
       size_bytes?: number;
+      latitude?: number;
+      longitude?: number;
+      name?: string;
+      address?: string;
+      state?: string;
     }[];
   };
+}
+
+function chatIdFrom(data: RelayEnvelope["data"]): string | undefined {
+  return data?.chat_id ?? data?.chat?.id;
+}
+
+function handleFrom(data: RelayEnvelope["data"]): string | undefined {
+  return data?.sender_handle?.handle ?? data?.handle;
+}
+
+function parsePlace(parts: NonNullable<RelayEnvelope["data"]>["parts"]): InboundPlace | undefined {
+  const part = parts?.find((item) => item.type === "place" && typeof item.latitude === "number");
+  if (!part || typeof part.longitude !== "number") return undefined;
+  return {
+    latitude: part.latitude!,
+    longitude: part.longitude,
+    ...(typeof part.name === "string" ? { name: part.name } : {}),
+    ...(typeof part.address === "string" ? { address: part.address } : {}),
+  };
+}
+
+function parseLocationShare(
+  parts: NonNullable<RelayEnvelope["data"]>["parts"],
+): "live" | "ended" | undefined {
+  const part = parts?.find((item) => item.type === "location");
+  if (part?.state === "live" || part?.state === "ended") return part.state;
+  return undefined;
 }
 
 /** Relay's `message.received` envelope. Other event types are acknowledged and ignored. */
 function parseRelayEnvelope(event: RelayEnvelope): InboundEvent {
   if (!event.event_id) throw new Error("event is missing event_id");
   const data = event.data ?? {};
-  const from = data.sender_handle?.handle;
+  const from = handleFrom(data);
+  const chatId = chatIdFrom(data);
+  if (event.event_type === "location.sharing.started" && from) {
+    return { id: event.event_id, kind: "location_share", from, chatId, locationShare: "live" };
+  }
+  if (event.event_type === "location.sharing.stopped" && from) {
+    return { id: event.event_id, kind: "location_share", from, chatId, locationShare: "ended" };
+  }
   if (event.event_type !== "message.received" || data.direction !== "inbound" || !from) {
-    return { id: event.event_id, kind: "ignored", from: from ?? "" };
+    return { id: event.event_id, kind: "ignored", from: from ?? "", ...(chatId ? { chatId } : {}) };
   }
   // A button tap arrives as a text part whose value is the button's label.
   const parts = data.parts ?? [];
@@ -113,6 +165,8 @@ function parseRelayEnvelope(event: RelayEnvelope): InboundEvent {
     .filter((part) => part.type === "text" && typeof part.value === "string")
     .map((part) => part.value as string)
     .join("\n");
+  const place = parsePlace(parts);
+  const locationShare = parseLocationShare(parts);
   const audio = parts.find((part) => part.type === "media" && part.mime_type?.startsWith("audio/"));
   if (audio?.id && audio.url) {
     return {
@@ -120,6 +174,7 @@ function parseRelayEnvelope(event: RelayEnvelope): InboundEvent {
       kind: "message",
       from,
       text,
+      chatId,
       audio: {
         attachmentId: audio.id,
         url: audio.url,
@@ -129,7 +184,15 @@ function parseRelayEnvelope(event: RelayEnvelope): InboundEvent {
       },
     };
   }
-  return { id: event.event_id, kind: "message", from, text };
+  return {
+    id: event.event_id,
+    kind: "message",
+    from,
+    text,
+    ...(chatId ? { chatId } : {}),
+    ...(place ? { place } : {}),
+    ...(locationShare ? { locationShare } : {}),
+  };
 }
 
 /** Normalize a Relay platform event (or the legacy shape the mock demo and tests post). */
@@ -142,16 +205,29 @@ export function parsePlatformEvent(payload: unknown): InboundEvent {
     type?: string;
     from?: string | { id?: string };
     text?: string;
+    chatId?: string;
     button?: { id?: string };
     recording?: { url?: string };
+    place?: InboundPlace;
+    locationShare?: "live" | "ended";
   };
   const from = typeof event.from === "string" ? event.from : event.from?.id;
   if (!event.id || !from) throw new Error("event is missing id or sender");
-  if (event.type === "button") return { id: event.id, kind: "button", from, buttonId: event.button?.id };
-  if (event.type === "recording.completed") {
-    return { id: event.id, kind: "recording", from, recordingUrl: event.recording?.url };
+  if (event.type === "button") {
+    return { id: event.id, kind: "button", from, buttonId: event.button?.id, chatId: event.chatId };
   }
-  return { id: event.id, kind: "message", from, text: event.text ?? "" };
+  if (event.type === "recording.completed") {
+    return { id: event.id, kind: "recording", from, recordingUrl: event.recording?.url, chatId: event.chatId };
+  }
+  return {
+    id: event.id,
+    kind: "message",
+    from,
+    text: event.text ?? "",
+    chatId: event.chatId,
+    place: event.place,
+    locationShare: event.locationShare,
+  };
 }
 
 /** Durable idempotency ledger: each platform event id is processed at most once. */

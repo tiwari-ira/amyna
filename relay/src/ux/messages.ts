@@ -56,6 +56,18 @@ export const copy = {
     "When you're ready, paste your patient ID (the code starting with fn_pat_ or u_ on " +
     "your records paperwork) and I'll link your health records. If you don't know " +
     "it, just tell me what the bill says and I'll help you find it.",
+  locationAsk:
+    "Share your location in this chat (Once is fine, or keep sharing while you're at the appointment) " +
+    "and I'll ping you if it looks like you're at a hospital so you can record the visit. " +
+    'You can also send "I\'m at the hospital".',
+  nearHospital: (name: string): OutboundMessage => ({
+    text: `Looks like you're at ${name}. Want to start recording this visit so I can check the bill later?`,
+    buttons: [BUTTONS.recordYes, BUTTONS.recordSkip],
+  }),
+  notNearHospital:
+    "Thanks. That doesn't look like a hospital or clinic, so I won't start a recording. Share again when you arrive.",
+  hospitalNeedsId:
+    "Looks like you're at a hospital. Send your FinchNode patient ID first and I'll start the recording.",
   dataConsent: (): OutboundMessage => ({
     text: `To review your bills I need your permission:\n\n"${DATA_CONSENT_TEXT}"`,
     buttons: [BUTTONS.consentYes, BUTTONS.consentNo],

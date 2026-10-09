@@ -12,6 +12,13 @@ import {
 import { answerOpenPrompt, captureClaimId, replyToNotification, reviewBill } from "./approvalFlow";
 import { answerDataConsent, askDataConsent } from "./consent";
 import { type HandlerContext, patientScope, say, serialize } from "./context";
+import {
+  askForLocation,
+  flushPendingPlace,
+  handleLocationEvent,
+  rememberChat,
+  startRecordingFromHospital,
+} from "./hospitalCheckin";
 
 const PATIENT_ID = /fn_pat_[A-Za-z0-9_]+|u_[0-9a-fA-F]+/;
 const TEXT_CHOICES: Record<string, string> = {
@@ -64,6 +71,7 @@ async function capturePatientId(
     convo.finchnodePatientId = patientId;
     convo.caseId = created.case_id;
   }
+  await askForLocation(ctx, convo);
   await askDataConsent(ctx, convo);
 }
 
@@ -87,11 +95,13 @@ export function handleIncoming(ctx: HandlerContext, event: InboundEvent): Promis
 
 async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
   let convo = ctx.store.get(event.from);
+  rememberChat(convo, event.chatId);
   if (event.text?.trim().toLowerCase() === "restart") {
     convo = ctx.store.reset(event.from);
     await start(ctx, convo);
     return;
   }
+  if (await handleLocationEvent(ctx, convo, event)) return;
   if (event.kind === "recording") {
     await onRecordingCompleted(ctx, convo, event.recordingUrl);
     return;
@@ -114,13 +124,21 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
     case "awaiting_data_consent":
       return await answerDataConsent(ctx, convo, choice);
     case "awaiting_recording_choice":
-      return await answerRecordingChoice(ctx, convo, choice);
+      if ((choice === BUTTONS.recordYes.id || choice === "YES") && !convo.caseId) {
+        return await startRecordingFromHospital(ctx, convo);
+      }
+      await answerRecordingChoice(ctx, convo, choice);
+      await flushPendingPlace(ctx, convo);
+      return;
     case "recording":
       return await awaitVoiceMemo(ctx, convo, choice);
     case "processing_visit":
       if (await checkVisitEvidence(ctx, convo)) return;
       return await say(ctx, convo, copy.stillProcessingVisit);
     case "ready_for_bill":
+      if (choice === BUTTONS.recordYes.id) {
+        return await answerRecordingChoice(ctx, convo, choice);
+      }
       if (choice === BUTTONS.reviewBill.id || /review|bill/i.test(event.text ?? "")) {
         return await reviewBill(ctx, convo);
       }
