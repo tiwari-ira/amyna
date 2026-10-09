@@ -53,7 +53,7 @@ export const copy = {
   // Shown only when the flow truly needs the patient ID (demo/sandbox identity).
   // Explained in plain English; the patient never has to know terms in advance.
   idGuidance:
-    "When you're ready, paste your patient ID (the code starting with fn_pat_ on " +
+    "When you're ready, paste your patient ID (the code starting with fn_pat_ or u_ on " +
     "your records paperwork) and I'll link your health records. If you don't know " +
     "it, just tell me what the bill says and I'll help you find it.",
   dataConsent: (): OutboundMessage => ({

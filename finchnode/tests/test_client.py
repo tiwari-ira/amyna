@@ -77,5 +77,42 @@ def test_demo_mode_is_keyless_and_retries_5xx() -> None:
     assert calls["n"] == 2
 
 
+def test_sandbox_reads_the_records_bundle_when_fhir_is_missing() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path == "/users/u1/records":
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "demographics": {"id": "u1", "name": "Demo Patient"},
+                        "labs": [
+                            {
+                                "id": "lab1",
+                                "name": "Complete blood count",
+                                "date": "2026-01-02",
+                                "codes": [{"system": "http://loinc.org", "code": "58410-2"}],
+                            }
+                        ],
+                        "medications": [{"id": "med1", "name": "Ativan", "startDate": "2026-01-02"}],
+                    }
+                },
+            )
+        return httpx.Response(404)
+
+    client = HttpFinchNodeClient(
+        mode="sandbox",
+        base_url="https://finchnode.test",
+        api_key="ck_test_abc",
+        http=_http(handler),
+    )
+    assert client.get_patient("u1")["id"] == "u1"
+    procedures = client.search("Procedure", "u1")
+    assert procedures[0]["resourceType"] == "Procedure"
+    assert procedures[0]["code"]["text"] == "Complete blood count"
+    assert client.search("MedicationRequest", "u1")[0]["id"] == "med1"
+    assert client.search("Claim", "missing") == []
+
+
 def test_build_client_mock() -> None:
     assert isinstance(build_client("mock"), FixtureClient)

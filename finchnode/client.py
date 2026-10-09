@@ -60,6 +60,104 @@ def _bundle_resources(bundle: dict[str, Any]) -> list[dict[str, Any]]:
     return [entry["resource"] for entry in bundle.get("entry", []) if "resource" in entry]
 
 
+def _concept(item: dict[str, Any]) -> dict[str, Any]:
+    """Records-API item -> FHIR CodeableConcept. Source system/code/display stay as sent."""
+    label = item.get("name") or item.get("reason") or item.get("type")
+    coding = [
+        {"system": code.get("system"), "code": str(code["code"]), "display": code.get("display")}
+        for code in item.get("codes") or []
+        if isinstance(code, dict) and code.get("code")
+    ]
+    return {"text": label if isinstance(label, str) else "", "coding": coding}
+
+
+def _as_procedure(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "resourceType": "Procedure",
+        "id": item.get("id"),
+        "status": item.get("status"),
+        "code": _concept(item),
+        "performedDateTime": item.get("effectiveDate") or item.get("date") or item.get("issuedDate"),
+    }
+
+
+def _as_medication(item: dict[str, Any], resource_type: str) -> dict[str, Any]:
+    dosage = item.get("dosage")
+    return {
+        "resourceType": resource_type,
+        "id": item.get("id"),
+        "status": item.get("status"),
+        "medicationCodeableConcept": _concept(item),
+        "authoredOn": item.get("startDate"),
+        "effectiveDateTime": item.get("startDate"),
+        "dosage": dosage if isinstance(dosage, dict) else {},
+    }
+
+
+def _as_encounter(item: dict[str, Any]) -> dict[str, Any]:
+    location = item.get("location")
+    return {
+        "resourceType": "Encounter",
+        "id": item.get("id"),
+        "status": item.get("status"),
+        "type": [_concept(item)],
+        "period": {"start": item.get("startDate")},
+        "serviceProvider": {"display": location} if isinstance(location, str) else {},
+    }
+
+
+def _as_patient(data: dict[str, Any], patient_id: str) -> dict[str, Any]:
+    demo = data.get("demographics") if isinstance(data.get("demographics"), dict) else {}
+    raw_name = demo.get("name")
+    if isinstance(raw_name, str):
+        parts = raw_name.split()
+        fhir_name = (
+            {"given": parts[:-1], "family": parts[-1]} if len(parts) > 1 else {"text": raw_name}
+        )
+    elif isinstance(raw_name, dict):
+        fhir_name = raw_name
+    else:
+        fhir_name = {}
+    return {"resourceType": "Patient", "id": demo.get("id") or patient_id, "name": [fhir_name]}
+
+
+# Records-API lists that correspond to a FHIR search the rest of the app already does.
+_RECORD_LISTS: dict[str, tuple[str, ...]] = {
+    "Encounter": ("encounters",),
+    "Procedure": ("diagnosticReports", "labs"),
+    "MedicationRequest": ("medications",),
+    "MedicationAdministration": ("medicationAdministrations",),
+    "Observation": ("labs",),
+    "DiagnosticReport": ("diagnosticReports",),
+}
+
+
+def resources_from_records(data: dict[str, Any], resource_type: str) -> list[dict[str, Any]]:
+    """Map a `/users/{id}/records` payload into the FHIR resources `search` returns."""
+    if resource_type == "Claim":
+        claims = data.get("claims")
+        if isinstance(claims, dict):
+            return [
+                item
+                for key in ("claims", "explanationsOfBenefit")
+                for item in claims.get(key) or []
+                if isinstance(item, dict)
+            ]
+        return [item for item in claims or [] if isinstance(item, dict)]
+    resources: list[dict[str, Any]] = []
+    for key in _RECORD_LISTS.get(resource_type, ()):
+        for item in data.get(key) or []:
+            if not isinstance(item, dict):
+                continue
+            if resource_type in ("Procedure", "Observation", "DiagnosticReport"):
+                resources.append(_as_procedure(item))
+            elif resource_type == "Encounter":
+                resources.append(_as_encounter(item))
+            else:
+                resources.append(_as_medication(item, resource_type))
+    return resources
+
+
 class FixtureClient:
     """MOCK mode: synthetic JSON fixtures, one folder per patient."""
 
@@ -86,6 +184,7 @@ class HttpFinchNodeClient:
 
     PATIENT_PATH = "/fhir/Patient/{patient_id}"
     SEARCH_PATH = "/fhir/{resource_type}"
+    RECORDS_PATH = "/users/{patient_id}/records"
 
     def __init__(
         self,
@@ -127,6 +226,7 @@ class HttpFinchNodeClient:
         headers = {"Accept": "application/fhir+json, application/json"}
         if mode in ("sandbox", "production") and api_key:
             headers["Authorization"] = f"Bearer {api_key}"
+        self._mode = mode
         self._http = http or httpx.Client(base_url=base_url.rstrip("/"), timeout=10.0)
         self._http.headers.update(headers)
         self._retries = retries
@@ -146,10 +246,23 @@ class HttpFinchNodeClient:
                 time.sleep(self._backoff_s * (2**attempt))
         raise FinchNodeError(f"FinchNode request failed: {path}") from last_error
 
+    def _records(self, patient_id: str) -> dict[str, Any] | None:
+        """Patient-authorized records bundle. None when this account has no such user."""
+        response = self._get(self.RECORDS_PATH.format(patient_id=patient_id))
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        body = response.json()
+        data = body.get("data") if isinstance(body, dict) else None
+        return data if isinstance(data, dict) else None
+
     def get_patient(self, patient_id: str) -> dict[str, Any] | None:
         response = self._get(self.PATIENT_PATH.format(patient_id=patient_id))
         if response.status_code == 404:
-            return None
+            if self._mode not in ("sandbox", "production"):
+                return None
+            data = self._records(patient_id)
+            return _as_patient(data, patient_id) if data else None
         response.raise_for_status()
         return response.json()
 
@@ -157,9 +270,18 @@ class HttpFinchNodeClient:
         try:
             return self._search(resource_type, patient_id)
         except httpx.HTTPStatusError as exc:
-            if resource_type == "Claim" and exc.response.status_code == 404:
-                return self._search("ExplanationOfBenefit", patient_id)
-            raise
+            if exc.response.status_code != 404:
+                raise
+            if resource_type == "Claim":
+                try:
+                    return self._search("ExplanationOfBenefit", patient_id)
+                except httpx.HTTPStatusError as eob:
+                    if eob.response.status_code != 404:
+                        raise
+            if self._mode not in ("sandbox", "production"):
+                raise
+            data = self._records(patient_id)
+            return resources_from_records(data, resource_type) if data else []
 
     def _search(self, resource_type: str, patient_id: str) -> list[dict[str, Any]]:
         resources: list[dict[str, Any]] = []

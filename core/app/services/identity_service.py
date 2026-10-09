@@ -74,7 +74,7 @@ def link_finch(db: Session, *, case: CaseRow, actor: str) -> FinchLinkRow | None
     if existing:
         return existing
     link = FinchLinkRow(
-        id=new_id("flink"),
+        id=new_id("finch_link"),
         user_id=case.user_id,
         finchnode_patient_id=case.finchnode_patient_id,
         status=LinkStatus.LINKED.value,

@@ -13,7 +13,7 @@ import { answerOpenPrompt, captureClaimId, replyToNotification, reviewBill } fro
 import { answerDataConsent, askDataConsent } from "./consent";
 import { type HandlerContext, patientScope, say, serialize } from "./context";
 
-const PATIENT_ID = /fn_pat_[A-Za-z0-9_]+/;
+const PATIENT_ID = /fn_pat_[A-Za-z0-9_]+|u_[0-9a-fA-F]+/;
 const TEXT_CHOICES: Record<string, string> = {
   yes: "YES",
   y: "YES",

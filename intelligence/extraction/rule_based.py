@@ -23,6 +23,18 @@ MEDICATIONS: dict[str, str] = {
     "gadolinium": "gadolinium contrast",
     "contrast dye": "gadolinium contrast",
 }
+PROCEDURES: dict[str, str] = {
+    "blood test": "blood test",
+    "blood draw": "blood draw",
+    "lab work": "lab work",
+    "x-ray": "X-ray",
+    "xray": "X-ray",
+    "ct scan": "CT scan",
+    "cat scan": "CT scan",
+    "ultrasound": "ultrasound",
+    "labs": "lab work",
+    "lab": "lab work",
+}
 SERVICES: dict[str, str] = {
     "general anesthesia": "anesthesia",
     "anesthesia": "anesthesia",
@@ -97,6 +109,9 @@ class RuleBasedExtractor:
             for sentence in split_sentences(segment.text.replace("\u2019", "'")):
                 confidence = QUESTION_CONFIDENCE if sentence.rstrip().endswith("?") else base
                 entities.extend(self._imaging(sentence, segment, confidence))
+                entities.extend(
+                    self._terms(sentence, segment, confidence, PROCEDURES, EvidenceKind.PROCEDURE)
+                )
                 entities.extend(
                     self._terms(sentence, segment, confidence, MEDICATIONS, EvidenceKind.MEDICATION)
                 )
