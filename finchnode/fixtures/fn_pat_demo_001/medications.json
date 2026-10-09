@@ -1,0 +1,36 @@
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "MedicationAdministration",
+        "id": "medadmin-lorazepam-2026-09-15",
+        "status": "completed",
+        "medicationCodeableConcept": {
+          "coding": [{"system": "http://www.nlm.nih.gov/research/umls/rxnorm", "code": "6470", "display": "lorazepam"}],
+          "text": "lorazepam 1 mg IV"
+        },
+        "subject": {"reference": "Patient/fn_pat_demo_001"},
+        "context": {"reference": "Encounter/enc-2026-09-15"},
+        "effectiveDateTime": "2026-09-15T16:15:00Z",
+        "dosage": {"route": {"text": "IV"}, "dose": {"value": 1, "unit": "mg"}}
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "MedicationAdministration",
+        "id": "medadmin-contrast-2026-09-15",
+        "status": "completed",
+        "medicationCodeableConcept": {
+          "coding": [{"system": "https://finchnode.example/fhir/CodeSystem/local-med", "code": "GAD-CONTRAST", "display": "gadolinium-based contrast agent"}],
+          "text": "gadolinium-based contrast agent"
+        },
+        "subject": {"reference": "Patient/fn_pat_demo_001"},
+        "context": {"reference": "Encounter/enc-2026-09-15"},
+        "effectiveDateTime": "2026-09-15T16:50:00Z",
+        "dosage": {"route": {"text": "IV"}, "dose": {"value": 15, "unit": "ml"}}
+      }
+    }
+  ]
+}

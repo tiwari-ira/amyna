@@ -1,0 +1,13 @@
+{
+  "agent_protocol_version": "1.0.0",
+  "digests": {
+    "ClaimAnalysisRequest": "model:5a912fc2dbdd4215a1796af773a870038e380ecab953f312335c220524a158bf",
+    "ClaimAnalysisResponse": "model:cade33eb3801c099be15b360c0f123c15c59b6703f60bfffb61151e7582de604",
+    "DisputeRequest": "model:826c82a2294fd764fc3ac1880ed0395f9510610ded4e46402acc74ed0710bf58",
+    "DisputeResponse": "model:db3730161deedc146a9fc0e13c1fe9a8942f3df7276c4c7249e8107befcefab4",
+    "OrchestratorTrigger": "model:9c50082241b8d54cf23f0bd841e06f2edbc713d83cce5d673621b7750a093ac5",
+    "OrchestratorTriggerAck": "model:9ab864b0893e09d57ef94af13eef533b686d5d27d12df44901bf7062dc08258e",
+    "VisitEvidenceRequest": "model:d403829f65cadae623fc1a488d1766e00d726b4388ff3927844d28590b4d4982",
+    "VisitEvidenceResponse": "model:f630679b68e3e7dabd74c46aa3f7539034680b8a7516dac8f97c81c42c4323a4"
+  }
+}

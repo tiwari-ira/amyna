@@ -1,0 +1,24 @@
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Coverage",
+        "id": "cov-demo-001",
+        "status": "active",
+        "subscriberId": "SYN-MBR-000123",
+        "beneficiary": {"reference": "Patient/fn_pat_demo_001"},
+        "contained": [
+          {
+            "resourceType": "Organization",
+            "id": "payer",
+            "name": "Acme Health Plan",
+            "telecom": [{"system": "phone", "value": "+12487208903"}]
+          }
+        ],
+        "payor": [{"reference": "#payer", "display": "Acme Health Plan"}]
+      }
+    }
+  ]
+}

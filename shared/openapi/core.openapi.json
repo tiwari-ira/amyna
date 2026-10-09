@@ -1,0 +1,7274 @@
+{
+  "components": {
+    "schemas": {
+      "Actor": {
+        "description": "Who performed a human action.",
+        "enum": [
+          "patient",
+          "caregiver",
+          "staff",
+          "system"
+        ],
+        "title": "Actor",
+        "type": "string"
+      },
+      "AgentName": {
+        "enum": [
+          "orchestrator",
+          "visit_agent",
+          "claim_agent",
+          "dispute_agent",
+          "voice_agent"
+        ],
+        "title": "AgentName",
+        "type": "string"
+      },
+      "AgentRun": {
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/AgentName"
+          },
+          "case_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Id"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "request_type": {
+            "title": "Request Type",
+            "type": "string"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentRunStatus"
+          }
+        },
+        "required": [
+          "run_id",
+          "agent",
+          "request_type",
+          "status",
+          "started_at"
+        ],
+        "title": "AgentRun",
+        "type": "object"
+      },
+      "AgentRunRef": {
+        "additionalProperties": false,
+        "description": "Optional provenance: which agent request produced this tool call.",
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/AgentName"
+          },
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "agent",
+          "request_id"
+        ],
+        "title": "AgentRunRef",
+        "type": "object"
+      },
+      "AgentRunStatus": {
+        "enum": [
+          "running",
+          "succeeded",
+          "failed"
+        ],
+        "title": "AgentRunStatus",
+        "type": "string"
+      },
+      "AssistantExplainIn": {
+        "additionalProperties": false,
+        "properties": {
+          "term": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "term"
+        ],
+        "title": "AssistantExplainIn",
+        "type": "object"
+      },
+      "AssistantTermExplanation": {
+        "properties": {
+          "plain_language": {
+            "title": "Plain Language",
+            "type": "string"
+          },
+          "term": {
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "term",
+          "plain_language"
+        ],
+        "title": "AssistantTermExplanation",
+        "type": "object"
+      },
+      "AssistantUnderstandIn": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "AssistantUnderstandIn",
+        "type": "object"
+      },
+      "AssistantUnderstandResult": {
+        "properties": {
+          "candidate_amount_cents": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Amount Cents"
+          },
+          "candidate_claim_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Claim Number"
+          },
+          "candidate_patient_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Patient Name"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "follow_up_question": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follow Up Question"
+          },
+          "intent": {
+            "title": "Intent",
+            "type": "string"
+          },
+          "reply": {
+            "title": "Reply",
+            "type": "string"
+          },
+          "suggested_action": {
+            "title": "Suggested Action",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent",
+          "suggested_action",
+          "reply",
+          "confidence"
+        ],
+        "title": "AssistantUnderstandResult",
+        "type": "object"
+      },
+      "AuthSessionCreate": {
+        "additionalProperties": false,
+        "description": "Start an Amyna session for a verified identity subject.\n\nIn dev/test/staging this issues a demo session (synthetic identities only).\nIn production this endpoint is disabled: the identity provider (e.g. the\nRelay platform's verified user) must supply the Amyna-issued session token.",
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "subject": {
+            "maxLength": 120,
+            "minLength": 3,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject"
+        ],
+        "title": "AuthSessionCreate",
+        "type": "object"
+      },
+      "AuthSessionResult": {
+        "properties": {
+          "patient_token": {
+            "description": "Opaque bearer token; Core stores only its hash. Not PHI.",
+            "title": "Patient Token",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user_id",
+          "patient_token"
+        ],
+        "title": "AuthSessionResult",
+        "type": "object"
+      },
+      "CallMergePhase": {
+        "description": "First-class lifecycle of the immediate human merge on a paused call (17A).\n\nSENSITIVE_REQUEST_DETECTED -> PATIENT_BEING_CONNECTED -> PATIENT_CONNECTED\n-> PATIENT_HANDLING_VERIFICATION -> PATIENT_RELEASED -> AI_RESUMING.\nMERGE_FAILED is the explicit failure escape (the AI is never auto-resumed).",
+        "enum": [
+          "sensitive_request_detected",
+          "patient_being_connected",
+          "patient_connected_with_human",
+          "patient_handling_verification",
+          "patient_released",
+          "ai_resuming",
+          "merge_failed"
+        ],
+        "title": "CallMergePhase",
+        "type": "string"
+      },
+      "CallSession": {
+        "properties": {
+          "call_id": {
+            "title": "Call Id",
+            "type": "string"
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "dispute_id": {
+            "title": "Dispute Id",
+            "type": "string"
+          },
+          "end_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Reason"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "insurer_response": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/InsurerResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "merge_phase": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CallMergePhase"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "open_intervention_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Open Intervention Id"
+          },
+          "provider_call_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Call Ref"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/CallStatus"
+          },
+          "to_number_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Number Masked"
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/components/schemas/CallTurn"
+            },
+            "title": "Turns",
+            "type": "array"
+          }
+        },
+        "required": [
+          "call_id",
+          "case_id",
+          "dispute_id",
+          "status",
+          "started_at"
+        ],
+        "title": "CallSession",
+        "type": "object"
+      },
+      "CallSpeaker": {
+        "enum": [
+          "insurer",
+          "agent",
+          "system",
+          "human"
+        ],
+        "title": "CallSpeaker",
+        "type": "string"
+      },
+      "CallStatus": {
+        "enum": [
+          "initiating",
+          "in_progress",
+          "paused_for_human",
+          "completed",
+          "failed"
+        ],
+        "title": "CallStatus",
+        "type": "string"
+      },
+      "CallTurn": {
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "speaker": {
+            "$ref": "#/components/schemas/CallSpeaker"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "speaker",
+          "text",
+          "at"
+        ],
+        "title": "CallTurn",
+        "type": "object"
+      },
+      "Case": {
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/Channel"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "external_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Ref"
+          },
+          "patient": {
+            "$ref": "#/components/schemas/PatientRef"
+          },
+          "state": {
+            "$ref": "#/components/schemas/CaseState"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_id",
+          "state",
+          "channel",
+          "patient",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Case",
+        "type": "object"
+      },
+      "CaseCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "$ref": "#/components/schemas/Channel",
+            "default": "api"
+          },
+          "external_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Ref"
+          },
+          "patient": {
+            "$ref": "#/components/schemas/PatientRef"
+          }
+        },
+        "required": [
+          "patient"
+        ],
+        "title": "CaseCreate",
+        "type": "object"
+      },
+      "CaseDetail": {
+        "description": "Everything Core knows about a case. Returned by GET /cases/{id} and tool get_case.",
+        "properties": {
+          "agent_runs": {
+            "items": {
+              "$ref": "#/components/schemas/AgentRun"
+            },
+            "title": "Agent Runs",
+            "type": "array"
+          },
+          "calls": {
+            "items": {
+              "$ref": "#/components/schemas/CallSession"
+            },
+            "title": "Calls",
+            "type": "array"
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/Channel"
+          },
+          "claim": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Claim"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "consents": {
+            "items": {
+              "$ref": "#/components/schemas/Consent"
+            },
+            "title": "Consents",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dispute": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dispute"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceItem"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "external_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Ref"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/DisputeCandidate"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "interventions": {
+            "items": {
+              "$ref": "#/components/schemas/HumanIntervention"
+            },
+            "title": "Interventions",
+            "type": "array"
+          },
+          "line_assessments": {
+            "items": {
+              "$ref": "#/components/schemas/LineAssessment"
+            },
+            "title": "Line Assessments",
+            "type": "array"
+          },
+          "patient": {
+            "$ref": "#/components/schemas/PatientRef"
+          },
+          "state": {
+            "$ref": "#/components/schemas/CaseState"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "visit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Visit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "case_id",
+          "state",
+          "channel",
+          "patient",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CaseDetail",
+        "type": "object"
+      },
+      "CaseState": {
+        "description": "Lifecycle of a case. Transitions are enforced in core/app/state_machine.py.",
+        "enum": [
+          "CREATED",
+          "VISIT_RECORDED",
+          "TRANSCRIBED",
+          "EVIDENCE_EXTRACTED",
+          "CLAIM_RECEIVED",
+          "ANALYZED",
+          "AWAITING_PATIENT_INPUT",
+          "FINDINGS_CONFIRMED",
+          "DISPUTE_PREPARED",
+          "AWAITING_APPROVAL",
+          "APPROVED",
+          "CALL_IN_PROGRESS",
+          "HUMAN_REQUIRED",
+          "RESOLVED",
+          "REJECTED",
+          "FAILED"
+        ],
+        "title": "CaseState",
+        "type": "string"
+      },
+      "Channel": {
+        "description": "Interface a request or decision came through.",
+        "enum": [
+          "relay",
+          "asi1",
+          "api",
+          "voice"
+        ],
+        "title": "Channel",
+        "type": "string"
+      },
+      "Claim": {
+        "properties": {
+          "case_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Id"
+          },
+          "claim_id": {
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "date_of_service": {
+            "format": "date",
+            "title": "Date Of Service",
+            "type": "string"
+          },
+          "external_claim_id": {
+            "title": "External Claim Id",
+            "type": "string"
+          },
+          "facility_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facility Name"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimLine"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "payer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payer Name"
+          },
+          "provider_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Name"
+          },
+          "received_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Received At"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ClaimSource"
+          },
+          "total_billed_cents": {
+            "title": "Total Billed Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "claim_id",
+          "external_claim_id",
+          "date_of_service",
+          "total_billed_cents",
+          "source",
+          "lines"
+        ],
+        "title": "Claim",
+        "type": "object"
+      },
+      "ClaimAnalysisResult": {
+        "properties": {
+          "case_state": {
+            "$ref": "#/components/schemas/CaseState"
+          },
+          "claim_id": {
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/DisputeCandidate"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "line_assessments": {
+            "items": {
+              "$ref": "#/components/schemas/LineAssessment"
+            },
+            "title": "Line Assessments",
+            "type": "array"
+          },
+          "next_question": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HumanIntervention"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkStatus"
+          },
+          "total_flagged_cents": {
+            "title": "Total Flagged Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "case_state",
+          "claim_id",
+          "findings",
+          "line_assessments",
+          "total_flagged_cents"
+        ],
+        "title": "ClaimAnalysisResult",
+        "type": "object"
+      },
+      "ClaimIngest": {
+        "additionalProperties": false,
+        "description": "Attach a claim to a case, either pulled from FinchNode or uploaded.",
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "claim": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClaimUpload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "finchnode_claim_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finchnode Claim Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ClaimSource"
+          }
+        },
+        "required": [
+          "case_id",
+          "source"
+        ],
+        "title": "ClaimIngest",
+        "type": "object"
+      },
+      "ClaimLine": {
+        "properties": {
+          "billed_cents": {
+            "title": "Billed Cents",
+            "type": "integer"
+          },
+          "claim_id": {
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "code": {
+            "$ref": "#/components/schemas/CodeRef"
+          },
+          "date_of_service": {
+            "format": "date",
+            "title": "Date Of Service",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "line_id": {
+            "title": "Line Id",
+            "type": "string"
+          },
+          "line_number": {
+            "title": "Line Number",
+            "type": "integer"
+          },
+          "modifiers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Modifiers",
+            "type": "array"
+          },
+          "ndc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ndc"
+          },
+          "revenue_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revenue Code"
+          },
+          "units": {
+            "default": 1,
+            "title": "Units",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "line_id",
+          "claim_id",
+          "line_number",
+          "code",
+          "description",
+          "date_of_service",
+          "billed_cents"
+        ],
+        "title": "ClaimLine",
+        "type": "object"
+      },
+      "ClaimLineUpload": {
+        "additionalProperties": false,
+        "properties": {
+          "billed_cents": {
+            "minimum": 0.0,
+            "title": "Billed Cents",
+            "type": "integer"
+          },
+          "code": {
+            "$ref": "#/components/schemas/CodeRef"
+          },
+          "date_of_service": {
+            "format": "date",
+            "title": "Date Of Service",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "line_number": {
+            "minimum": 1.0,
+            "title": "Line Number",
+            "type": "integer"
+          },
+          "modifiers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Modifiers",
+            "type": "array"
+          },
+          "ndc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ndc"
+          },
+          "revenue_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revenue Code"
+          },
+          "units": {
+            "default": 1,
+            "minimum": 1.0,
+            "title": "Units",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "line_number",
+          "code",
+          "description",
+          "date_of_service",
+          "billed_cents"
+        ],
+        "title": "ClaimLineUpload",
+        "type": "object"
+      },
+      "ClaimSource": {
+        "enum": [
+          "finchnode",
+          "upload"
+        ],
+        "title": "ClaimSource",
+        "type": "string"
+      },
+      "ClaimUpload": {
+        "additionalProperties": false,
+        "properties": {
+          "date_of_service": {
+            "format": "date",
+            "title": "Date Of Service",
+            "type": "string"
+          },
+          "external_claim_id": {
+            "title": "External Claim Id",
+            "type": "string"
+          },
+          "facility_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facility Name"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/ClaimLineUpload"
+            },
+            "minItems": 1,
+            "title": "Lines",
+            "type": "array"
+          },
+          "payer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payer Name"
+          },
+          "provider_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Name"
+          }
+        },
+        "required": [
+          "external_claim_id",
+          "date_of_service",
+          "lines"
+        ],
+        "title": "ClaimUpload",
+        "type": "object"
+      },
+      "CodeCandidate": {
+        "description": "A ranked code suggestion produced by the code resolver.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "concept": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concept"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "display": {
+            "title": "Display",
+            "type": "string"
+          },
+          "match_method": {
+            "$ref": "#/components/schemas/MatchMethod"
+          },
+          "system": {
+            "$ref": "#/components/schemas/CodeSystem"
+          }
+        },
+        "required": [
+          "system",
+          "code",
+          "display",
+          "confidence",
+          "match_method"
+        ],
+        "title": "CodeCandidate",
+        "type": "object"
+      },
+      "CodeRef": {
+        "description": "A code exactly as it appears in a source record or claim line.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display"
+          },
+          "source_system_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Original coding-system URI preserved from the source record.",
+            "title": "Source System Uri"
+          },
+          "system": {
+            "$ref": "#/components/schemas/CodeSystem"
+          }
+        },
+        "required": [
+          "system",
+          "code"
+        ],
+        "title": "CodeRef",
+        "type": "object"
+      },
+      "CodeSystem": {
+        "enum": [
+          "CPT",
+          "HCPCS",
+          "ICD10CM",
+          "RXNORM",
+          "NDC",
+          "SNOMED",
+          "LOINC",
+          "LOCAL"
+        ],
+        "title": "CodeSystem",
+        "type": "string"
+      },
+      "ConfirmationQuestion": {
+        "description": "One clean patient question plus how each answer changes the finding.",
+        "properties": {
+          "effects": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FindingStatus"
+            },
+            "propertyNames": {
+              "$ref": "#/components/schemas/PatientAnswer"
+            },
+            "title": "Effects",
+            "type": "object"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/PatientAnswer"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "question": {
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "effects"
+        ],
+        "title": "ConfirmationQuestion",
+        "type": "object"
+      },
+      "Consent": {
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor"
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/Channel"
+          },
+          "consent_id": {
+            "title": "Consent Id",
+            "type": "string"
+          },
+          "consent_text": {
+            "title": "Consent Text",
+            "type": "string"
+          },
+          "consent_type": {
+            "$ref": "#/components/schemas/ConsentType"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "granted": {
+            "title": "Granted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "consent_id",
+          "case_id",
+          "consent_type",
+          "granted",
+          "consent_text",
+          "actor",
+          "channel",
+          "created_at"
+        ],
+        "title": "Consent",
+        "type": "object"
+      },
+      "ConsentCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor",
+            "default": "patient"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/Channel"
+          },
+          "consent_text": {
+            "description": "The exact wording the patient agreed to.",
+            "minLength": 10,
+            "title": "Consent Text",
+            "type": "string"
+          },
+          "consent_type": {
+            "$ref": "#/components/schemas/ConsentType"
+          },
+          "granted": {
+            "default": true,
+            "title": "Granted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "consent_type",
+          "consent_text",
+          "channel"
+        ],
+        "title": "ConsentCreate",
+        "type": "object"
+      },
+      "ConsentType": {
+        "enum": [
+          "health_data_access",
+          "recording"
+        ],
+        "title": "ConsentType",
+        "type": "string"
+      },
+      "DecisionType": {
+        "enum": [
+          "finding_answer",
+          "handoff_resolution",
+          "dispute_approval",
+          "dispute_rejection"
+        ],
+        "title": "DecisionType",
+        "type": "string"
+      },
+      "Dispute": {
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "claim_id": {
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "dispute_id": {
+            "title": "Dispute Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DisputeItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "letter_text": {
+            "title": "Letter Text",
+            "type": "string"
+          },
+          "patient_authorization_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Authorization Id"
+          },
+          "rejected_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejected Reason"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DisputeStatus"
+          },
+          "total_disputed_cents": {
+            "title": "Total Disputed Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dispute_id",
+          "case_id",
+          "claim_id",
+          "status",
+          "items",
+          "total_disputed_cents",
+          "letter_text",
+          "created_at"
+        ],
+        "title": "Dispute",
+        "type": "object"
+      },
+      "DisputeAction": {
+        "enum": [
+          "remove_charge",
+          "request_itemization",
+          "correct_code",
+          "review_price"
+        ],
+        "title": "DisputeAction",
+        "type": "string"
+      },
+      "DisputeApproval": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor",
+            "default": "patient"
+          },
+          "authorization_text": {
+            "description": "Exact authorization wording the patient saw and accepted.",
+            "minLength": 10,
+            "title": "Authorization Text",
+            "type": "string"
+          },
+          "authorize_call": {
+            "default": true,
+            "description": "Also authorize Amyna to call the insurer.",
+            "title": "Authorize Call",
+            "type": "boolean"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/Channel"
+          }
+        },
+        "required": [
+          "channel",
+          "authorization_text"
+        ],
+        "title": "DisputeApproval",
+        "type": "object"
+      },
+      "DisputeCandidate": {
+        "description": "A potential billing discrepancy (\"finding\") with evidence and confidence.",
+        "properties": {
+          "amount_cents": {
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "claim_id": {
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "claim_line_id": {
+            "title": "Claim Line Id",
+            "type": "string"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "confirmation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConfirmationQuestion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "human_confirmation_required": {
+            "title": "Human Confirmation Required",
+            "type": "boolean"
+          },
+          "issue_type": {
+            "$ref": "#/components/schemas/IssueType"
+          },
+          "line_number": {
+            "title": "Line Number",
+            "type": "integer"
+          },
+          "patient_answer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PatientAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "patient_facing_explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Facing Explanation"
+          },
+          "policy_citations": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyCitation"
+            },
+            "title": "Policy Citations",
+            "type": "array"
+          },
+          "recommended_action": {
+            "$ref": "#/components/schemas/DisputeAction"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FindingStatus"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "case_id",
+          "claim_id",
+          "claim_line_id",
+          "line_number",
+          "issue_type",
+          "title",
+          "explanation",
+          "amount_cents",
+          "confidence",
+          "human_confirmation_required",
+          "status",
+          "recommended_action"
+        ],
+        "title": "DisputeCandidate",
+        "type": "object"
+      },
+      "DisputeCaseView": {
+        "description": "Minimal, PHI-reduced view of a case for the dispute and voice agents.",
+        "properties": {
+          "allowed_codes": {
+            "description": "Codes the voice agent may mention (from case evidence).",
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Codes",
+            "type": "array"
+          },
+          "allowed_concepts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Concepts",
+            "type": "array"
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "case_state": {
+            "$ref": "#/components/schemas/CaseState"
+          },
+          "claim_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Claim Number"
+          },
+          "date_of_service": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Of Service"
+          },
+          "dispute": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dispute"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/DisputeCandidate"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "member_ref_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Ref Masked"
+          },
+          "patient_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Display Name"
+          },
+          "payer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payer Name"
+          },
+          "provider_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Name"
+          },
+          "total_billed_cents": {
+            "default": 0,
+            "title": "Total Billed Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "case_id",
+          "case_state"
+        ],
+        "title": "DisputeCaseView",
+        "type": "object"
+      },
+      "DisputeCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_id"
+        ],
+        "title": "DisputeCreate",
+        "type": "object"
+      },
+      "DisputeItem": {
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/DisputeAction"
+          },
+          "amount_cents": {
+            "title": "Amount Cents",
+            "type": "integer"
+          },
+          "claim_line_id": {
+            "title": "Claim Line Id",
+            "type": "string"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "finding_id": {
+            "title": "Finding Id",
+            "type": "string"
+          },
+          "issue_type": {
+            "$ref": "#/components/schemas/IssueType"
+          },
+          "line_number": {
+            "title": "Line Number",
+            "type": "integer"
+          },
+          "policy_citations": {
+            "items": {
+              "$ref": "#/components/schemas/PolicyCitation"
+            },
+            "title": "Policy Citations",
+            "type": "array"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finding_id",
+          "claim_line_id",
+          "line_number",
+          "issue_type",
+          "action",
+          "amount_cents",
+          "summary"
+        ],
+        "title": "DisputeItem",
+        "type": "object"
+      },
+      "DisputePreparation": {
+        "description": "Result of POST /disputes. ``dispute`` is None while agents are still working.",
+        "properties": {
+          "case_state": {
+            "$ref": "#/components/schemas/CaseState"
+          },
+          "dispute": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Dispute"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkStatus"
+          }
+        },
+        "required": [
+          "status",
+          "case_state"
+        ],
+        "title": "DisputePreparation",
+        "type": "object"
+      },
+      "DisputeRejection": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor",
+            "default": "patient"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/Channel"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "channel"
+        ],
+        "title": "DisputeRejection",
+        "type": "object"
+      },
+      "DisputeStatus": {
+        "enum": [
+          "awaiting_approval",
+          "approved",
+          "rejected",
+          "resolved",
+          "failed"
+        ],
+        "title": "DisputeStatus",
+        "type": "string"
+      },
+      "EvidenceItem": {
+        "description": "A fact extracted from appointment evidence, e.g. 'lorazepam 1 mg IV was given'.",
+        "properties": {
+          "attributes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Attributes",
+            "type": "object"
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "codes": {
+            "items": {
+              "$ref": "#/components/schemas/CodeCandidate"
+            },
+            "title": "Codes",
+            "type": "array"
+          },
+          "concept": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Normalized concept key from the code table, e.g. 'lorazepam'.",
+            "title": "Concept"
+          },
+          "confidence": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "extractor": {
+            "title": "Extractor",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/EvidenceKind"
+          },
+          "negated": {
+            "default": false,
+            "title": "Negated",
+            "type": "boolean"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Segment Ids",
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/components/schemas/EvidenceSource",
+            "default": "visit_transcript"
+          },
+          "visit_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visit Id"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "case_id",
+          "kind",
+          "description",
+          "confidence",
+          "extractor"
+        ],
+        "title": "EvidenceItem",
+        "type": "object"
+      },
+      "EvidenceKind": {
+        "enum": [
+          "procedure",
+          "medication",
+          "service",
+          "supply"
+        ],
+        "title": "EvidenceKind",
+        "type": "string"
+      },
+      "EvidenceRef": {
+        "description": "Pointer to the evidence behind a finding (what was checked and where).",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "ref_id": {
+            "title": "Ref Id",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/EvidenceSource"
+          }
+        },
+        "required": [
+          "source",
+          "ref_id",
+          "description"
+        ],
+        "title": "EvidenceRef",
+        "type": "object"
+      },
+      "EvidenceSource": {
+        "enum": [
+          "visit_transcript",
+          "finchnode_record",
+          "claim",
+          "patient_statement",
+          "policy_document",
+          "insurer_call"
+        ],
+        "title": "EvidenceSource",
+        "type": "string"
+      },
+      "FindOrCreateCaseRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "channel": {
+            "$ref": "#/components/schemas/Channel"
+          },
+          "external_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Ref"
+          },
+          "finchnode_patient_id": {
+            "title": "Finchnode Patient Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "finchnode_patient_id",
+          "channel"
+        ],
+        "title": "FindOrCreateCaseRequest",
+        "type": "object"
+      },
+      "FindOrCreateCaseResponse": {
+        "properties": {
+          "case": {
+            "$ref": "#/components/schemas/Case"
+          },
+          "created": {
+            "title": "Created",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "case",
+          "created"
+        ],
+        "title": "FindOrCreateCaseResponse",
+        "type": "object"
+      },
+      "FindingStatus": {
+        "enum": [
+          "open",
+          "confirmed",
+          "dismissed",
+          "needs_clarification"
+        ],
+        "title": "FindingStatus",
+        "type": "string"
+      },
+      "GetCaseClaimRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_id"
+        ],
+        "title": "GetCaseClaimRequest",
+        "type": "object"
+      },
+      "GetCaseRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_id"
+        ],
+        "title": "GetCaseRequest",
+        "type": "object"
+      },
+      "GetClaimLineRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "line_id": {
+            "title": "Line Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_id",
+          "line_id"
+        ],
+        "title": "GetClaimLineRequest",
+        "type": "object"
+      },
+      "GetDisputeCaseRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_id"
+        ],
+        "title": "GetDisputeCaseRequest",
+        "type": "object"
+      },
+      "GetPatientContextRequest": {
+        "additionalProperties": false,
+        "description": "Ask Core for the case's authorized patient context (prompt task 6).\n\nThe language/agent layers never receive raw patient credentials; Core is the\nonly door to private data, and it answers with the minimum, consent-gated set.",
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_id"
+        ],
+        "title": "GetPatientContextRequest",
+        "type": "object"
+      },
+      "GetSupportingEvidenceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "line_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line Id"
+          }
+        },
+        "required": [
+          "case_id"
+        ],
+        "title": "GetSupportingEvidenceRequest",
+        "type": "object"
+      },
+      "GetVisitTranscriptRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "visit_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Visit Id"
+          }
+        },
+        "required": [
+          "case_id"
+        ],
+        "title": "GetVisitTranscriptRequest",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HandoffIn": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "minLength": 3,
+            "title": "Detail",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/HumanReason",
+            "default": "patient_takeover"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "HandoffIn",
+        "type": "object"
+      },
+      "HealthRecord": {
+        "description": "A normalized FinchNode record. ``codes`` are preserved verbatim from the source.",
+        "properties": {
+          "attributes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Attributes",
+            "type": "object"
+          },
+          "codes": {
+            "items": {
+              "$ref": "#/components/schemas/CodeRef"
+            },
+            "title": "Codes",
+            "type": "array"
+          },
+          "display": {
+            "title": "Display",
+            "type": "string"
+          },
+          "encounter_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Encounter Ref"
+          },
+          "facility": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facility"
+          },
+          "occurred_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred On"
+          },
+          "patient_id": {
+            "title": "Patient Id",
+            "type": "string"
+          },
+          "performer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Performer"
+          },
+          "record_id": {
+            "title": "Record Id",
+            "type": "string"
+          },
+          "record_type": {
+            "$ref": "#/components/schemas/RecordType"
+          },
+          "source": {
+            "default": "finchnode",
+            "title": "Source",
+            "type": "string"
+          },
+          "source_id": {
+            "title": "Source Id",
+            "type": "string"
+          },
+          "source_resource_type": {
+            "title": "Source Resource Type",
+            "type": "string"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "record_id",
+          "record_type",
+          "patient_id",
+          "display",
+          "source_resource_type",
+          "source_id"
+        ],
+        "title": "HealthRecord",
+        "type": "object"
+      },
+      "HealthStatus": {
+        "properties": {
+          "app_env": {
+            "title": "App Env",
+            "type": "string"
+          },
+          "contracts_version": {
+            "title": "Contracts Version",
+            "type": "string"
+          },
+          "database": {
+            "title": "Database",
+            "type": "string"
+          },
+          "modes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Modes",
+            "type": "object"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "version",
+          "contracts_version",
+          "app_env",
+          "database",
+          "modes"
+        ],
+        "title": "HealthStatus",
+        "type": "object"
+      },
+      "HumanDecision": {
+        "description": "A recorded human decision. Approval decisions double as patient authorizations.",
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor"
+          },
+          "authorization_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authorization Text"
+          },
+          "authorize_call": {
+            "default": false,
+            "title": "Authorize Call",
+            "type": "boolean"
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/Channel"
+          },
+          "choice": {
+            "title": "Choice",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "decision_id": {
+            "title": "Decision Id",
+            "type": "string"
+          },
+          "decision_type": {
+            "$ref": "#/components/schemas/DecisionType"
+          },
+          "dispute_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dispute Id"
+          },
+          "finding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Id"
+          },
+          "intervention_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intervention Id"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "required": [
+          "decision_id",
+          "case_id",
+          "decision_type",
+          "choice",
+          "actor",
+          "channel",
+          "created_at"
+        ],
+        "title": "HumanDecision",
+        "type": "object"
+      },
+      "HumanIntervention": {
+        "description": "A request for human input: a confirmation question or a call handoff.",
+        "properties": {
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "finding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Id"
+          },
+          "intervention_id": {
+            "title": "Intervention Id",
+            "type": "string"
+          },
+          "notified": {
+            "default": false,
+            "title": "Notified",
+            "type": "boolean"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/HumanReason"
+          },
+          "resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HumanDecision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
+          },
+          "status": {
+            "$ref": "#/components/schemas/InterventionStatus"
+          }
+        },
+        "required": [
+          "intervention_id",
+          "case_id",
+          "reason",
+          "prompt",
+          "options",
+          "status",
+          "created_at"
+        ],
+        "title": "HumanIntervention",
+        "type": "object"
+      },
+      "HumanInterventionCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "finding_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finding Id"
+          },
+          "options": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "prompt": {
+            "minLength": 3,
+            "title": "Prompt",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/HumanReason"
+          }
+        },
+        "required": [
+          "case_id",
+          "reason",
+          "prompt"
+        ],
+        "title": "HumanInterventionCreate",
+        "type": "object"
+      },
+      "HumanInterventionResolve": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor",
+            "default": "patient"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/Channel",
+            "default": "relay"
+          },
+          "choice": {
+            "description": "YES/NO/NOT_SURE for confirmations, DONE/CANCEL for handoffs.",
+            "title": "Choice",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Free text. Rejected if it contains SSNs, PINs or passwords.",
+            "title": "Notes"
+          }
+        },
+        "required": [
+          "choice"
+        ],
+        "title": "HumanInterventionResolve",
+        "type": "object"
+      },
+      "HumanReason": {
+        "description": "Why a human is needed. Credential/identity reasons always pause a call.",
+        "enum": [
+          "patient_confirmation",
+          "credential_request",
+          "identity_verification",
+          "unknown_medical_fact",
+          "call_escalation",
+          "patient_takeover",
+          "agent_error"
+        ],
+        "title": "HumanReason",
+        "type": "string"
+      },
+      "HumanResolutionResult": {
+        "properties": {
+          "call": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CallSession"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_state": {
+            "$ref": "#/components/schemas/CaseState"
+          },
+          "intervention": {
+            "$ref": "#/components/schemas/HumanIntervention"
+          },
+          "next_question": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HumanIntervention"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "intervention",
+          "case_state"
+        ],
+        "title": "HumanResolutionResult",
+        "type": "object"
+      },
+      "IngestClaimRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "claim": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClaimUpload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "finchnode_claim_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finchnode Claim Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ClaimSource"
+          }
+        },
+        "required": [
+          "case_id",
+          "source"
+        ],
+        "title": "IngestClaimRequest",
+        "type": "object"
+      },
+      "InsurerOutcome": {
+        "enum": [
+          "charges_removed",
+          "partially_removed",
+          "denied",
+          "pending_review",
+          "callback_required"
+        ],
+        "title": "InsurerOutcome",
+        "type": "string"
+      },
+      "InsurerResponse": {
+        "properties": {
+          "itemization_requested_line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Itemization Requested Line Ids",
+            "type": "array"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/InsurerOutcome"
+          },
+          "recorded_at": {
+            "format": "date-time",
+            "title": "Recorded At",
+            "type": "string"
+          },
+          "reference_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Number"
+          },
+          "removed_line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Removed Line Ids",
+            "type": "array"
+          },
+          "representative_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Representative Name"
+          }
+        },
+        "required": [
+          "outcome",
+          "recorded_at"
+        ],
+        "title": "InsurerResponse",
+        "type": "object"
+      },
+      "InterventionStatus": {
+        "enum": [
+          "open",
+          "resolved",
+          "cancelled"
+        ],
+        "title": "InterventionStatus",
+        "type": "string"
+      },
+      "IssueType": {
+        "enum": [
+          "unsupported_charge",
+          "duplicate_charge",
+          "unknown_medication",
+          "code_mismatch",
+          "price_above_published"
+        ],
+        "title": "IssueType",
+        "type": "string"
+      },
+      "JobsDrainResult": {
+        "properties": {
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "ran": {
+            "title": "Ran",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ran",
+          "failed"
+        ],
+        "title": "JobsDrainResult",
+        "type": "object"
+      },
+      "LineAssessment": {
+        "properties": {
+          "claim_line_id": {
+            "title": "Claim Line Id",
+            "type": "string"
+          },
+          "concept": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Concept"
+          },
+          "evidence_refs": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceRef"
+            },
+            "title": "Evidence Refs",
+            "type": "array"
+          },
+          "line_number": {
+            "title": "Line Number",
+            "type": "integer"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "status": {
+            "$ref": "#/components/schemas/LineMatchStatus"
+          }
+        },
+        "required": [
+          "claim_line_id",
+          "line_number",
+          "status"
+        ],
+        "title": "LineAssessment",
+        "type": "object"
+      },
+      "LineMatchStatus": {
+        "enum": [
+          "matched",
+          "unsupported",
+          "duplicate",
+          "unknown",
+          "mismatch",
+          "price_outlier"
+        ],
+        "title": "LineMatchStatus",
+        "type": "string"
+      },
+      "MatchMethod": {
+        "description": "How a code candidate was obtained (strongest first).",
+        "enum": [
+          "source_record",
+          "exact",
+          "alias",
+          "fuzzy"
+        ],
+        "title": "MatchMethod",
+        "type": "string"
+      },
+      "MetricsSnapshot": {
+        "description": "GET /internal/metrics. Counts only -- never PHI.",
+        "properties": {
+          "active_calls": {
+            "default": 0,
+            "title": "Active Calls",
+            "type": "integer"
+          },
+          "latency_avg_ms": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Latency Avg Ms",
+            "type": "object"
+          },
+          "open_interventions": {
+            "default": 0,
+            "title": "Open Interventions",
+            "type": "integer"
+          },
+          "queue_depth": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Queue Depth",
+            "type": "object"
+          },
+          "requests": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Requests",
+            "type": "object"
+          },
+          "stuck_cases_24h": {
+            "default": 0,
+            "title": "Stuck Cases 24H",
+            "type": "integer"
+          }
+        },
+        "title": "MetricsSnapshot",
+        "type": "object"
+      },
+      "NotificationButton": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "NotificationButton",
+        "type": "object"
+      },
+      "NotificationKind": {
+        "enum": [
+          "confirmation_question",
+          "approval_request",
+          "human_handoff",
+          "status_update",
+          "final_report"
+        ],
+        "title": "NotificationKind",
+        "type": "string"
+      },
+      "PatientAnswer": {
+        "enum": [
+          "YES",
+          "NO",
+          "NOT_SURE"
+        ],
+        "title": "PatientAnswer",
+        "type": "string"
+      },
+      "PatientClaims": {
+        "properties": {
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/Claim"
+            },
+            "title": "Claims",
+            "type": "array"
+          }
+        },
+        "required": [
+          "claims"
+        ],
+        "title": "PatientClaims",
+        "type": "object"
+      },
+      "PatientContext": {
+        "description": "Minimum data a language layer may ever see for a case.",
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "finchnode_patient_id": {
+            "title": "Finchnode Patient Id",
+            "type": "string"
+          },
+          "has_health_data_consent": {
+            "title": "Has Health Data Consent",
+            "type": "boolean"
+          },
+          "member_ref_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Ref Masked"
+          },
+          "patient_display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Patient Display Name"
+          },
+          "payer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payer Name"
+          }
+        },
+        "required": [
+          "case_id",
+          "finchnode_patient_id",
+          "has_health_data_consent"
+        ],
+        "title": "PatientContext",
+        "type": "object"
+      },
+      "PatientDataRequest": {
+        "additionalProperties": false,
+        "description": "Least privilege: one tool per FinchNode record type, all consent-gated.",
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_id"
+        ],
+        "title": "PatientDataRequest",
+        "type": "object"
+      },
+      "PatientDecision": {
+        "enum": [
+          "approve",
+          "reject"
+        ],
+        "title": "PatientDecision",
+        "type": "string"
+      },
+      "PatientNotification": {
+        "description": "A message Core wants delivered to the patient (rendered by the Relay service).",
+        "properties": {
+          "buttons": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationButton"
+            },
+            "title": "Buttons",
+            "type": "array"
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Data",
+            "type": "object"
+          },
+          "delivered": {
+            "default": false,
+            "title": "Delivered",
+            "type": "boolean"
+          },
+          "delivery_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivery Ref"
+          },
+          "dispute_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dispute Id"
+          },
+          "intervention_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intervention Id"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/NotificationKind"
+          },
+          "notification_id": {
+            "title": "Notification Id",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "notification_id",
+          "case_id",
+          "kind",
+          "text",
+          "created_at"
+        ],
+        "title": "PatientNotification",
+        "type": "object"
+      },
+      "PatientRecords": {
+        "properties": {
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/HealthRecord"
+            },
+            "title": "Records",
+            "type": "array"
+          }
+        },
+        "required": [
+          "records"
+        ],
+        "title": "PatientRecords",
+        "type": "object"
+      },
+      "PatientRef": {
+        "description": "Minimal patient reference. Demographics are enriched from FinchNode after consent.",
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "finchnode_patient_id": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Finchnode Patient Id",
+            "type": "string"
+          },
+          "member_ref": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Member Ref"
+          },
+          "payer_name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payer Name"
+          },
+          "payer_phone": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payer Phone"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "maxLength": 2,
+                "minLength": 2,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Two-letter US state.",
+            "title": "State"
+          }
+        },
+        "required": [
+          "finchnode_patient_id"
+        ],
+        "title": "PatientRef",
+        "type": "object"
+      },
+      "PolicyCitation": {
+        "properties": {
+          "doc_id": {
+            "title": "Doc Id",
+            "type": "string"
+          },
+          "doc_type": {
+            "title": "Doc Type",
+            "type": "string"
+          },
+          "effective_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Date"
+          },
+          "jurisdiction": {
+            "title": "Jurisdiction",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          },
+          "snippet": {
+            "title": "Snippet",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "doc_id",
+          "title",
+          "source",
+          "jurisdiction",
+          "doc_type",
+          "snippet",
+          "score"
+        ],
+        "title": "PolicyCitation",
+        "type": "object"
+      },
+      "RecordConsentRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor",
+            "default": "patient"
+          },
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/Channel"
+          },
+          "consent_text": {
+            "minLength": 10,
+            "title": "Consent Text",
+            "type": "string"
+          },
+          "consent_type": {
+            "$ref": "#/components/schemas/ConsentType"
+          },
+          "granted": {
+            "default": true,
+            "title": "Granted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "case_id",
+          "consent_type",
+          "consent_text",
+          "channel"
+        ],
+        "title": "RecordConsentRequest",
+        "type": "object"
+      },
+      "RecordDisputeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "claim_id": {
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DisputeItem"
+            },
+            "minItems": 1,
+            "title": "Items",
+            "type": "array"
+          },
+          "letter_text": {
+            "title": "Letter Text",
+            "type": "string"
+          },
+          "total_disputed_cents": {
+            "title": "Total Disputed Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "case_id",
+          "claim_id",
+          "items",
+          "letter_text",
+          "total_disputed_cents"
+        ],
+        "title": "RecordDisputeRequest",
+        "type": "object"
+      },
+      "RecordFindingsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "claim_id": {
+            "title": "Claim Id",
+            "type": "string"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/DisputeCandidate"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "line_assessments": {
+            "items": {
+              "$ref": "#/components/schemas/LineAssessment"
+            },
+            "title": "Line Assessments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "case_id",
+          "claim_id",
+          "findings",
+          "line_assessments"
+        ],
+        "title": "RecordFindingsRequest",
+        "type": "object"
+      },
+      "RecordFindingsResponse": {
+        "properties": {
+          "case_state": {
+            "$ref": "#/components/schemas/CaseState"
+          },
+          "findings": {
+            "items": {
+              "$ref": "#/components/schemas/DisputeCandidate"
+            },
+            "title": "Findings",
+            "type": "array"
+          },
+          "open_questions": {
+            "items": {
+              "$ref": "#/components/schemas/HumanIntervention"
+            },
+            "title": "Open Questions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "findings",
+          "case_state",
+          "open_questions"
+        ],
+        "title": "RecordFindingsResponse",
+        "type": "object"
+      },
+      "RecordInsurerResponseRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "call_id": {
+            "title": "Call Id",
+            "type": "string"
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "itemization_requested_line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Itemization Requested Line Ids",
+            "type": "array"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/InsurerOutcome"
+          },
+          "reference_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Number"
+          },
+          "removed_line_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Removed Line Ids",
+            "type": "array"
+          },
+          "representative_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Representative Name"
+          }
+        },
+        "required": [
+          "case_id",
+          "call_id",
+          "outcome"
+        ],
+        "title": "RecordInsurerResponseRequest",
+        "type": "object"
+      },
+      "RecordPatientDecisionRequest": {
+        "additionalProperties": false,
+        "description": "Relays an explicit patient decision captured in chat (ASI:One).",
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor",
+            "default": "patient"
+          },
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "authorization_text": {
+            "minLength": 10,
+            "title": "Authorization Text",
+            "type": "string"
+          },
+          "authorize_call": {
+            "default": false,
+            "title": "Authorize Call",
+            "type": "boolean"
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/Channel"
+          },
+          "decision": {
+            "$ref": "#/components/schemas/PatientDecision"
+          },
+          "dispute_id": {
+            "title": "Dispute Id",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "case_id",
+          "dispute_id",
+          "decision",
+          "authorization_text",
+          "channel"
+        ],
+        "title": "RecordPatientDecisionRequest",
+        "type": "object"
+      },
+      "RecordType": {
+        "enum": [
+          "encounter",
+          "procedure",
+          "medication",
+          "condition"
+        ],
+        "title": "RecordType",
+        "type": "string"
+      },
+      "RecordVisitEvidenceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceItem"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "visit_id": {
+            "title": "Visit Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_id",
+          "visit_id",
+          "evidence"
+        ],
+        "title": "RecordVisitEvidenceRequest",
+        "type": "object"
+      },
+      "RecordVisitEvidenceResponse": {
+        "properties": {
+          "case_state": {
+            "$ref": "#/components/schemas/CaseState"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceItem"
+            },
+            "title": "Evidence",
+            "type": "array"
+          }
+        },
+        "required": [
+          "evidence",
+          "case_state"
+        ],
+        "title": "RecordVisitEvidenceResponse",
+        "type": "object"
+      },
+      "RelayEventType": {
+        "description": "Signed events the Relay service posts to Core's /relay/webhook.",
+        "enum": [
+          "button_reply",
+          "text_reply",
+          "delivery_status"
+        ],
+        "title": "RelayEventType",
+        "type": "string"
+      },
+      "RelayWebhookEvent": {
+        "additionalProperties": false,
+        "description": "Signed event from the Relay service (HMAC over ``{timestamp}.{raw body}``).",
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "choice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Choice"
+          },
+          "dispute_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dispute Id"
+          },
+          "event_id": {
+            "description": "Idempotency key; processed at most once.",
+            "minLength": 6,
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/RelayEventType"
+          },
+          "intervention_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intervention Id"
+          },
+          "notification_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notification Id"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "event_id",
+          "event_type",
+          "case_id",
+          "occurred_at"
+        ],
+        "title": "RelayWebhookEvent",
+        "type": "object"
+      },
+      "RelayWebhookResult": {
+        "properties": {
+          "case_state": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "event_id": {
+            "title": "Event Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WebhookResultStatus"
+          }
+        },
+        "required": [
+          "status",
+          "event_id"
+        ],
+        "title": "RelayWebhookResult",
+        "type": "object"
+      },
+      "RequestHumanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Call Id"
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "detail": {
+            "minLength": 3,
+            "title": "Detail",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/HumanReason"
+          }
+        },
+        "required": [
+          "case_id",
+          "reason",
+          "detail"
+        ],
+        "title": "RequestHumanRequest",
+        "type": "object"
+      },
+      "ResolveHumanInterventionRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/Actor",
+            "default": "patient"
+          },
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/Channel"
+          },
+          "choice": {
+            "title": "Choice",
+            "type": "string"
+          },
+          "intervention_id": {
+            "title": "Intervention Id",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "required": [
+          "case_id",
+          "intervention_id",
+          "choice",
+          "channel"
+        ],
+        "title": "ResolveHumanInterventionRequest",
+        "type": "object"
+      },
+      "Speaker": {
+        "enum": [
+          "clinician",
+          "staff",
+          "patient",
+          "unknown"
+        ],
+        "title": "Speaker",
+        "type": "string"
+      },
+      "StartInsuranceCallRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentRunRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_id"
+        ],
+        "title": "StartInsuranceCallRequest",
+        "type": "object"
+      },
+      "SupportingEvidence": {
+        "properties": {
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceItem"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "finding": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DisputeCandidate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "line_assessment": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LineAssessment"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "evidence"
+        ],
+        "title": "SupportingEvidence",
+        "type": "object"
+      },
+      "TimelineEvent": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor": {
+            "title": "Actor",
+            "type": "string"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "kind",
+          "action",
+          "actor",
+          "summary"
+        ],
+        "title": "TimelineEvent",
+        "type": "object"
+      },
+      "Transcript": {
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "language": {
+            "default": "en",
+            "title": "Language",
+            "type": "string"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptSegment"
+            },
+            "title": "Segments",
+            "type": "array"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "transcript_id": {
+            "title": "Transcript Id",
+            "type": "string"
+          },
+          "visit_id": {
+            "title": "Visit Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "transcript_id",
+          "visit_id",
+          "source",
+          "segments"
+        ],
+        "title": "Transcript",
+        "type": "object"
+      },
+      "TranscriptSegment": {
+        "properties": {
+          "end_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Ms"
+          },
+          "segment_id": {
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "speaker": {
+            "$ref": "#/components/schemas/Speaker",
+            "default": "unknown"
+          },
+          "speaker_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Label"
+          },
+          "start_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Ms"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "segment_id",
+          "text"
+        ],
+        "title": "TranscriptSegment",
+        "type": "object"
+      },
+      "TranscriptSegmentIn": {
+        "additionalProperties": false,
+        "properties": {
+          "end_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Ms"
+          },
+          "speaker": {
+            "$ref": "#/components/schemas/Speaker",
+            "default": "unknown"
+          },
+          "speaker_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Label"
+          },
+          "start_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Ms"
+          },
+          "text": {
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "TranscriptSegmentIn",
+        "type": "object"
+      },
+      "TurnAction": {
+        "description": "What the voice session should do after an insurer utterance.",
+        "enum": [
+          "continue",
+          "pause_for_human",
+          "end"
+        ],
+        "title": "TurnAction",
+        "type": "string"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "Visit": {
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "facility_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facility Name"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "provider_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Name"
+          },
+          "recording_consent_id": {
+            "title": "Recording Consent Id",
+            "type": "string"
+          },
+          "recording_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording Ref"
+          },
+          "status": {
+            "$ref": "#/components/schemas/VisitStatus"
+          },
+          "transcript_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Id"
+          },
+          "visit_id": {
+            "title": "Visit Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "visit_id",
+          "case_id",
+          "recording_consent_id",
+          "status",
+          "created_at"
+        ],
+        "title": "Visit",
+        "type": "object"
+      },
+      "VisitComplete": {
+        "additionalProperties": false,
+        "properties": {
+          "language": {
+            "default": "en",
+            "title": "Language",
+            "type": "string"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptSegmentIn"
+            },
+            "minItems": 1,
+            "title": "Segments",
+            "type": "array"
+          },
+          "source": {
+            "default": "relay_transcription",
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "segments"
+        ],
+        "title": "VisitComplete",
+        "type": "object"
+      },
+      "VisitCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "facility_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facility Name"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "provider_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Name"
+          },
+          "recording_consent_id": {
+            "description": "Id of a granted `recording` consent.",
+            "title": "Recording Consent Id",
+            "type": "string"
+          },
+          "recording_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "URI of the stored recording.",
+            "title": "Recording Ref"
+          }
+        },
+        "required": [
+          "case_id",
+          "recording_consent_id"
+        ],
+        "title": "VisitCreate",
+        "type": "object"
+      },
+      "VisitEvidenceResult": {
+        "properties": {
+          "case_state": {
+            "$ref": "#/components/schemas/CaseState"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceItem"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkStatus"
+          },
+          "visit": {
+            "$ref": "#/components/schemas/Visit"
+          }
+        },
+        "required": [
+          "status",
+          "case_state",
+          "visit",
+          "evidence"
+        ],
+        "title": "VisitEvidenceResult",
+        "type": "object"
+      },
+      "VisitStatus": {
+        "enum": [
+          "recorded",
+          "transcribed",
+          "evidence_extracted"
+        ],
+        "title": "VisitStatus",
+        "type": "string"
+      },
+      "VisitTranscriptView": {
+        "properties": {
+          "transcript": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Transcript"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "visit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Visit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "VisitTranscriptView",
+        "type": "object"
+      },
+      "VoiceEventIn": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "type": {
+            "$ref": "#/components/schemas/VoiceEventType"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "VoiceEventIn",
+        "type": "object"
+      },
+      "VoiceEventResult": {
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/TurnAction"
+          },
+          "call": {
+            "$ref": "#/components/schemas/CallSession"
+          },
+          "intervention_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Intervention Id"
+          }
+        },
+        "required": [
+          "action",
+          "call"
+        ],
+        "title": "VoiceEventResult",
+        "type": "object"
+      },
+      "VoiceEventType": {
+        "description": "Events posted to POST /voice/{call_id}/event by telephony/voice bridges.",
+        "enum": [
+          "insurer_utterance",
+          "call_status",
+          "call_ended"
+        ],
+        "title": "VoiceEventType",
+        "type": "string"
+      },
+      "VoiceStartIn": {
+        "additionalProperties": false,
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "case_id"
+        ],
+        "title": "VoiceStartIn",
+        "type": "object"
+      },
+      "WebhookResultStatus": {
+        "enum": [
+          "processed",
+          "duplicate",
+          "ignored"
+        ],
+        "title": "WebhookResultStatus",
+        "type": "string"
+      },
+      "WorkStatus": {
+        "description": "Whether delegated agent work finished synchronously or is still running.",
+        "enum": [
+          "completed",
+          "pending"
+        ],
+        "title": "WorkStatus",
+        "type": "string"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "description": "Per-service token: RELAY_/FETCH_/VOICE_SERVICE_TOKEN",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "\nAmyna Core owns the case (single source of truth).\n\n* **Public API** \u2014 used by the Relay service and other clients (Bearer service token).\n* **/internal/tools/** \u2014 used by Fetch agents and the voice manager; scoped per caller.\n* **/relay/webhook** \u2014 signed (HMAC-SHA256) idempotent patient events.\n* **/voice/telnyx/webhook** \u2014 signed (Ed25519) Telnyx call events: completes the\n  insurer \u21c4 xAI SIP bridge on ``call.answered``, ends the call on ``call.hangup``.\n\nPrototype: synthetic data only, not HIPAA-ready.\n",
+    "title": "Amyna Core",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/assistant/explain": {
+      "post": {
+        "description": "Explain insurance jargon in plain English.",
+        "operationId": "explain_assistant_explain_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantExplainIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantTermExplanation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Explain",
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/assistant/understand": {
+      "post": {
+        "description": "Understand plain-English patient language and draft Amyna's next reply.",
+        "operationId": "understand_assistant_understand_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantUnderstandIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantUnderstandResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Understand",
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/auth/session": {
+      "post": {
+        "description": "Issue an opaque session token (demo environments; disabled in prod).",
+        "operationId": "start_session_auth_session_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthSessionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Start Session",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/cases": {
+      "post": {
+        "operationId": "create_case_cases_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Case"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Case",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/cases/{case_id}": {
+      "get": {
+        "operationId": "get_case_cases__case_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Case",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/cases/{case_id}/consents": {
+      "post": {
+        "description": "Record a patient consent (health data access or visit recording).",
+        "operationId": "record_consent_cases__case_id__consents_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsentCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Consent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Record Consent",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/cases/{case_id}/notifications": {
+      "get": {
+        "description": "Core's patient outbox (what the Relay service delivers / renders).",
+        "operationId": "get_notifications_cases__case_id__notifications_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PatientNotification"
+                  },
+                  "title": "Response Get Notifications Cases  Case Id  Notifications Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Notifications",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/cases/{case_id}/timeline": {
+      "get": {
+        "description": "Audit events and patient notifications, oldest first.",
+        "operationId": "get_timeline_cases__case_id__timeline_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TimelineEvent"
+                  },
+                  "title": "Response Get Timeline Cases  Case Id  Timeline Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Timeline",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/claims": {
+      "post": {
+        "description": "Attach the bill under review (FinchNode source requires health-data consent).",
+        "operationId": "ingest_claim_claims_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimIngest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claim"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ingest Claim",
+        "tags": [
+          "claims"
+        ]
+      }
+    },
+    "/claims/{claim_id}": {
+      "get": {
+        "operationId": "get_claim_claims__claim_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "title": "Claim Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claim"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Claim",
+        "tags": [
+          "claims"
+        ]
+      }
+    },
+    "/claims/{claim_id}/analyze": {
+      "post": {
+        "description": "Run the Claim Agent logic (idempotent). `status=pending` in FETCH_MODE=agentverse.",
+        "operationId": "analyze_claim_claims__claim_id__analyze_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "claim_id",
+            "required": true,
+            "schema": {
+              "title": "Claim Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimAnalysisResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Analyze Claim",
+        "tags": [
+          "claims"
+        ]
+      }
+    },
+    "/disputes": {
+      "post": {
+        "description": "Ask the Dispute Agent logic to draft the package. 202 while agents work.",
+        "operationId": "prepare_dispute_disputes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisputeCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisputePreparation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Prepare Dispute",
+        "tags": [
+          "disputes"
+        ]
+      }
+    },
+    "/disputes/{dispute_id}": {
+      "get": {
+        "operationId": "get_dispute_disputes__dispute_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dispute_id",
+            "required": true,
+            "schema": {
+              "title": "Dispute Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dispute"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Dispute",
+        "tags": [
+          "disputes"
+        ]
+      }
+    },
+    "/disputes/{dispute_id}/approve": {
+      "post": {
+        "description": "Explicit patient approval. Stores the authorization that gates any insurer call.",
+        "operationId": "approve_dispute_disputes__dispute_id__approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dispute_id",
+            "required": true,
+            "schema": {
+              "title": "Dispute Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisputeApproval"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dispute"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Approve Dispute",
+        "tags": [
+          "disputes"
+        ]
+      }
+    },
+    "/disputes/{dispute_id}/reject": {
+      "post": {
+        "operationId": "reject_dispute_disputes__dispute_id__reject_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dispute_id",
+            "required": true,
+            "schema": {
+              "title": "Dispute Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisputeRejection"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dispute"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Reject Dispute",
+        "tags": [
+          "disputes"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Liveness, database reachability and the configured integration modes (no auth).",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/human-intervention": {
+      "post": {
+        "description": "Ask a human for input. With `call_id` the call is paused (HUMAN_REQUIRED).",
+        "operationId": "create_intervention_human_intervention_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HumanInterventionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HumanIntervention"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Intervention",
+        "tags": [
+          "human"
+        ]
+      }
+    },
+    "/human-intervention/{intervention_id}": {
+      "get": {
+        "operationId": "get_intervention_human_intervention__intervention_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "intervention_id",
+            "required": true,
+            "schema": {
+              "title": "Intervention Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HumanIntervention"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Intervention",
+        "tags": [
+          "human"
+        ]
+      }
+    },
+    "/human-intervention/{intervention_id}/resolve": {
+      "post": {
+        "description": "Answer a question (YES/NO/NOT_SURE) or finish a handoff (DONE/CANCEL).\n\nNotes are rejected (422) if they contain SSNs, PINs, passwords or card numbers.",
+        "operationId": "resolve_intervention_human_intervention__intervention_id__resolve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "intervention_id",
+            "required": true,
+            "schema": {
+              "title": "Intervention Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HumanInterventionResolve"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HumanResolutionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Resolve Intervention",
+        "tags": [
+          "human"
+        ]
+      }
+    },
+    "/internal/jobs/drain": {
+      "post": {
+        "description": "Run due durable jobs (worker tick). The 17A merge-expiry sweep rides this.",
+        "operationId": "drain_jobs_internal_jobs_drain_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobsDrainResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Drain Jobs",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/internal/metrics": {
+      "get": {
+        "description": "Liveness++: throughput, failures, queue depth, active calls, stuck cases.",
+        "operationId": "metrics_internal_metrics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Metrics",
+        "tags": [
+          "ops"
+        ]
+      }
+    },
+    "/internal/tools/find_or_create_case": {
+      "post": {
+        "operationId": "tool_find_or_create_case",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FindOrCreateCaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindOrCreateCaseResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Load the open case for a FinchNode patient, or create one",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/get_case": {
+      "post": {
+        "operationId": "tool_get_case",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetCaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Full case detail",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/get_case_claim": {
+      "post": {
+        "operationId": "tool_get_case_claim",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetCaseClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claim"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "The case's claim with lines",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/get_claim_line": {
+      "post": {
+        "operationId": "tool_get_claim_line",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetClaimLineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClaimLine"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "One claim line of this case",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/get_dispute_case": {
+      "post": {
+        "operationId": "tool_get_dispute_case",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetDisputeCaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisputeCaseView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "PHI-reduced dispute view for dispute/voice agents",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/get_patient_claims": {
+      "post": {
+        "operationId": "tool_get_patient_claims",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatientDataRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientClaims"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "FinchNode claims (consent-gated)",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/get_patient_context": {
+      "post": {
+        "operationId": "tool_get_patient_context",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetPatientContextRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientContext"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Authorized, minimized patient context (identifiers only)",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/get_patient_encounters": {
+      "post": {
+        "operationId": "tool_get_patient_encounters",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatientDataRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientRecords"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "FinchNode encounters (consent-gated)",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/get_patient_medications": {
+      "post": {
+        "operationId": "tool_get_patient_medications",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatientDataRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientRecords"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "FinchNode medications (consent-gated)",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/get_patient_procedures": {
+      "post": {
+        "operationId": "tool_get_patient_procedures",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatientDataRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PatientRecords"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "FinchNode procedures (consent-gated)",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/get_supporting_evidence": {
+      "post": {
+        "operationId": "tool_get_supporting_evidence",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetSupportingEvidenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportingEvidence"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Evidence for the case (optionally for one line)",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/get_visit_transcript": {
+      "post": {
+        "operationId": "tool_get_visit_transcript",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GetVisitTranscriptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisitTranscriptView"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Visit + transcript for evidence extraction",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/ingest_claim": {
+      "post": {
+        "operationId": "tool_ingest_claim",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestClaimRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Claim"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Attach the bill under review (FinchNode needs consent)",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/record_consent": {
+      "post": {
+        "operationId": "tool_record_consent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordConsentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Consent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Record a patient consent captured by an agent (e.g. in ASI:One)",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/record_dispute": {
+      "post": {
+        "operationId": "tool_record_dispute",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordDisputeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dispute"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Persist a dispute package; requests patient approval",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/record_findings": {
+      "post": {
+        "operationId": "tool_record_findings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordFindingsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordFindingsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Persist discrepancy findings; opens confirmation questions",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/record_insurer_response": {
+      "post": {
+        "operationId": "tool_record_insurer_response",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordInsurerResponseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InsurerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Record the insurer's answer on the call (voice only)",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/record_patient_decision": {
+      "post": {
+        "operationId": "tool_record_patient_decision",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordPatientDecisionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dispute"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Relay an explicit patient approve/reject from chat",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/record_visit_evidence": {
+      "post": {
+        "operationId": "tool_record_visit_evidence",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordVisitEvidenceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordVisitEvidenceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Persist extracted visit evidence",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/request_human": {
+      "post": {
+        "operationId": "tool_request_human",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RequestHumanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HumanIntervention"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ask for a human; with call_id the call pauses",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/resolve_human_intervention": {
+      "post": {
+        "operationId": "tool_resolve_human_intervention",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveHumanInterventionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HumanResolutionResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Answer a question or finish a handoff",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/internal/tools/start_insurance_call": {
+      "post": {
+        "operationId": "tool_start_insurance_call",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartInsuranceCallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallSession"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start the insurer call (approval + authorization required)",
+        "tags": [
+          "internal-tools"
+        ]
+      }
+    },
+    "/relay/webhook": {
+      "post": {
+        "description": "Signed, idempotent patient event from the Relay service.\n\nHeaders: ``X-Amyna-Timestamp`` (unix seconds) and\n``X-Amyna-Signature: v1=<hex HMAC-SHA256(CORE_WEBHOOK_SECRET, \"{ts}.{raw body}\")>``.",
+        "operationId": "relay_webhook_relay_webhook_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RelayWebhookEvent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayWebhookResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Relay Webhook",
+        "tags": [
+          "relay"
+        ]
+      }
+    },
+    "/visits": {
+      "post": {
+        "description": "Register a recorded visit (requires a granted `recording` consent).",
+        "operationId": "create_visit_visits_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisitCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Visit"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Visit",
+        "tags": [
+          "visits"
+        ]
+      }
+    },
+    "/visits/{visit_id}/complete": {
+      "post": {
+        "description": "Attach the transcript; the Visit Agent logic then extracts evidence.",
+        "operationId": "complete_visit_visits__visit_id__complete_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "visit_id",
+            "required": true,
+            "schema": {
+              "title": "Visit Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VisitComplete"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VisitEvidenceResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Complete Visit",
+        "tags": [
+          "visits"
+        ]
+      }
+    },
+    "/visits/{visit_id}/evidence": {
+      "get": {
+        "operationId": "get_visit_evidence_visits__visit_id__evidence_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "visit_id",
+            "required": true,
+            "schema": {
+              "title": "Visit Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EvidenceItem"
+                  },
+                  "title": "Response Get Visit Evidence Visits  Visit Id  Evidence Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Visit Evidence",
+        "tags": [
+          "visits"
+        ]
+      }
+    },
+    "/voice/start": {
+      "post": {
+        "description": "Start the insurer call. 409 unless the dispute is APPROVED with stored authorization.",
+        "operationId": "start_call_voice_start_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceStartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallSession"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start Call",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
+    "/voice/telnyx/webhook": {
+      "post": {
+        "description": "Signed call events from Telnyx (Ed25519; no bearer token).\n\nHeaders: ``Telnyx-Timestamp`` (unix seconds) and ``Telnyx-Signature-Ed25519``\n(base64 Ed25519 over ``timestamp`` + raw body; account public key from Mission\nControl). ``call.answered`` for the insurer leg bridges the call to xAI's SIP\nURI (transfer); ``call.hangup`` ends the Core call. Acked 200 per the Telnyx\ndelivery contract.",
+        "operationId": "telnyx_webhook_voice_telnyx_webhook_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Telnyx Webhook Voice Telnyx Webhook Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Telnyx Webhook",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
+    "/voice/xai/webhook": {
+      "post": {
+        "description": "Signed ``realtime.call.incoming`` from xAI for a bridged SIP call (task 15).\n\nHeaders (verified against the current xAI SIP docs): ``webhook-id``,\n``webhook-timestamp``, ``webhook-signature``. The payload's ``data.call_id``\nis attached to our call via the ``x-amyna-call-id`` SIP header we set on\nTelnyx's transfer; then the realtime WebSocket attaches with ``?call_id=``.",
+        "operationId": "xai_incoming_call_webhook_voice_xai_webhook_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Xai Incoming Call Webhook Voice Xai Webhook Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Xai Incoming Call Webhook",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
+    "/voice/{call_id}": {
+      "get": {
+        "operationId": "get_call_voice__call_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "call_id",
+            "required": true,
+            "schema": {
+              "title": "Call Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CallSession"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Call",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
+    "/voice/{call_id}/event": {
+      "post": {
+        "description": "Insurer transcript or status event from a telephony/voice bridge.",
+        "operationId": "call_event_voice__call_id__event_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "call_id",
+            "required": true,
+            "schema": {
+              "title": "Call Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceEventIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceEventResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Call Event",
+        "tags": [
+          "voice"
+        ]
+      }
+    },
+    "/voice/{call_id}/human-handoff": {
+      "post": {
+        "description": "Pause the call and bring in the patient (e.g. the patient wants to take over).",
+        "operationId": "human_handoff_voice__call_id__human_handoff_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "call_id",
+            "required": true,
+            "schema": {
+              "title": "Call Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HandoffIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HumanIntervention"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Human Handoff",
+        "tags": [
+          "voice"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "Cases, consents, timeline and notifications",
+      "name": "cases"
+    },
+    {
+      "description": "Recorded visits, transcripts and visit evidence",
+      "name": "visits"
+    },
+    {
+      "description": "Claims and discrepancy analysis",
+      "name": "claims"
+    },
+    {
+      "description": "Dispute packages and patient approval",
+      "name": "disputes"
+    },
+    {
+      "description": "Human-in-the-loop questions and handoffs",
+      "name": "human"
+    },
+    {
+      "description": "Insurer calls (Core owns the session)",
+      "name": "voice"
+    },
+    {
+      "description": "Signed events from the Relay service",
+      "name": "relay"
+    },
+    {
+      "description": "Stateless natural-language understanding",
+      "name": "assistant"
+    },
+    {
+      "description": "Patient sessions and identity binding",
+      "name": "auth"
+    },
+    {
+      "description": "Metrics and durable jobs drain",
+      "name": "ops"
+    },
+    {
+      "description": "Agent + voice tools (scoped service tokens)",
+      "name": "internal-tools"
+    },
+    {
+      "description": "Liveness and configured modes",
+      "name": "health"
+    }
+  ]
+}

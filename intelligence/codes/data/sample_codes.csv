@@ -1,0 +1,17 @@
+system,code,display,concept,family,category,plain_label,aliases,ingredient
+CPT,70551,"MRI brain, without contrast (paraphrased)",mri_brain_no_contrast,mri_brain,procedure,an MRI of the brain without contrast,brain mri without contrast|mri of the brain without contrast|non-contrast brain mri|mri head without contrast,
+CPT,70552,"MRI brain, with contrast (paraphrased)",mri_brain_contrast,mri_brain,procedure,an MRI of the brain with contrast,brain mri with contrast only|mri head with contrast only,
+CPT,70553,"MRI brain, without and with contrast (paraphrased)",mri_brain_contrast,mri_brain,procedure,an MRI of the brain with contrast,mri of your brain with contrast|mri of the brain with contrast|brain mri with contrast|mri brain with contrast|mri brain with and without contrast|brain mri with and without contrast|mri head with and without contrast,
+CPT,01922,"Anesthesia for non-invasive imaging (paraphrased)",anesthesia_imaging,anesthesia,anesthesia,anesthesia,anesthesia for mri|anesthesia for imaging|general anesthesia|monitored anesthesia care|anesthesiologist|anesthesia|put you under,
+CPT,99213,"Office visit, established patient, low complexity (paraphrased)",office_visit,em_visit,service,an office visit,office visit|follow-up visit|follow up visit,
+CPT,96374,"IV push, single drug (paraphrased)",iv_push,infusion,procedure,an IV push injection,iv push|intravenous push,
+HCPCS,G0463,Hospital outpatient clinic visit for assessment and management,facility_fee,facility,facility,a facility fee,facility fee|clinic visit facility charge|outpatient facility fee,
+HCPCS,J2060,"Injection, lorazepam hydrochloride, 2 mg",lorazepam,benzodiazepine,drug,lorazepam,lorazepam|ativan,lorazepam
+HCPCS,J2250,"Injection, midazolam hydrochloride, per 1 mg",midazolam,benzodiazepine,drug,midazolam,midazolam|versed,midazolam
+HCPCS,J3490,Unclassified drugs,unclassified_drug,unclassified_drug,drug,an unspecified drug,unclassified drug|unlisted drug|unspecified drug,
+HCPCS,A9579,"Injection, gadolinium-based magnetic resonance contrast agent, not otherwise specified, per ml",gadolinium_contrast,contrast_agent,drug,gadolinium contrast,gadolinium|gadolinium contrast|contrast dye|mri contrast|contrast agent|gadolinium-based contrast agent,gadolinium
+RXNORM,6470,lorazepam,lorazepam,benzodiazepine,drug,lorazepam,lorazepam|ativan,lorazepam
+RXNORM,6960,midazolam,midazolam,benzodiazepine,drug,midazolam,midazolam|versed,midazolam
+LOCAL,GAD-CONTRAST,gadolinium-based contrast agent,gadolinium_contrast,contrast_agent,drug,gadolinium contrast,gadolinium-based contrast agent|gadolinium contrast,gadolinium
+ICD10CM,R51.9,"Headache, unspecified",headache,symptom,diagnosis,a headache,headache|headaches,
+ICD10CM,F41.9,"Anxiety disorder, unspecified",anxiety,mental_health,diagnosis,anxiety,anxiety|nervous,

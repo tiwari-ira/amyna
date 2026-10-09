@@ -1,0 +1,46 @@
+{
+  "_note": "SYNTHETIC demo data. No real person, provider, payer, member id or phone number.",
+  "patient": {
+    "finchnode_patient_id": "fn_pat_demo_001",
+    "display_name": "Jordan Rivera",
+    "member_ref": "SYN-MBR-000123",
+    "payer_name": "Acme Health Plan",
+    "payer_phone": "+12487208903",
+    "state": "CA"
+  },
+  "visit": {
+    "provider_name": "Dr. Priya Patel (synthetic)",
+    "facility_name": "Bayview Imaging Center (synthetic)",
+    "occurred_at": "2026-09-15T16:30:00Z",
+    "recording_ref": "mock://recordings/fn_pat_demo_001/2026-09-15.wav"
+  },
+  "transcript": {
+    "language": "en",
+    "source": "relay_transcription",
+    "segments": [
+      {"speaker": "clinician", "speaker_label": "Dr. Patel", "text": "Good morning, Jordan. Today we're doing the MRI of your brain with contrast that Dr. Kim ordered for your headaches."},
+      {"speaker": "patient", "speaker_label": "Jordan", "text": "Good morning. Honestly, I'm a little nervous about being in the machine."},
+      {"speaker": "clinician", "speaker_label": "Dr. Patel", "text": "That's very common. Before the scan, the nurse will give you 1 milligram of lorazepam through your IV to help you relax."},
+      {"speaker": "staff", "speaker_label": "Nurse Lee", "text": "I'm placing your IV now. We'll use it for the lorazepam first and then for the gadolinium contrast during the second part of the scan."},
+      {"speaker": "staff", "speaker_label": "Nurse Lee", "text": "Okay, the lorazepam is in. You may feel a little drowsy in a few minutes."},
+      {"speaker": "staff", "speaker_label": "Technologist Chen", "text": "We'll take the first set of images, then I'll inject the contrast and take the second set."},
+      {"speaker": "staff", "speaker_label": "Technologist Chen", "text": "Contrast is going in now. Hold still for about ten more minutes."},
+      {"speaker": "clinician", "speaker_label": "Dr. Patel", "text": "All done, Jordan. You did great. Since you had lorazepam, please have someone drive you home today."},
+      {"speaker": "patient", "speaker_label": "Jordan", "text": "Thank you. My sister is here to pick me up."}
+    ]
+  },
+  "claim": {
+    "finchnode_claim_id": "CLM-2026-0915-001"
+  },
+  "expected": {
+    "finding_count": 3,
+    "questions": 2,
+    "findings": [
+      {"line_number": 3, "issue_type": "unsupported_charge", "amount_cents": 78000, "human_confirmation_required": true},
+      {"line_number": 5, "issue_type": "duplicate_charge", "amount_cents": 25000, "human_confirmation_required": false},
+      {"line_number": 6, "issue_type": "unknown_medication", "amount_cents": 4000, "human_confirmation_required": true}
+    ],
+    "matched_line_numbers": [1, 2, 4],
+    "total_flagged_cents": 107000
+  }
+}

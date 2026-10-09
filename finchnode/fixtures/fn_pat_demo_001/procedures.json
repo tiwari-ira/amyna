@@ -1,0 +1,32 @@
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "proc-mri-2026-09-15",
+        "status": "completed",
+        "code": {
+          "coding": [{"system": "http://www.ama-assn.org/go/cpt", "code": "70553", "display": "MRI brain without and with contrast"}],
+          "text": "MRI brain with and without contrast"
+        },
+        "subject": {"reference": "Patient/fn_pat_demo_001"},
+        "encounter": {"reference": "Encounter/enc-2026-09-15"},
+        "performedDateTime": "2026-09-15T16:40:00Z",
+        "performer": [{"actor": {"display": "Dr. Priya Patel (synthetic)"}}]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "proc-iv-2026-09-15",
+        "status": "completed",
+        "code": {"text": "Peripheral IV placement"},
+        "subject": {"reference": "Patient/fn_pat_demo_001"},
+        "encounter": {"reference": "Encounter/enc-2026-09-15"},
+        "performedDateTime": "2026-09-15T16:10:00Z"
+      }
+    }
+  ]
+}

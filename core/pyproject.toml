@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claimshield-core"
+version = "0.1.0"
+description = "Amyna Core: case API, state machine, adapters, voice manager"
+requires-python = ">=3.11"
+dependencies = [
+  "claimshield-contracts",
+  "claimshield-libs",
+  "fastapi>=0.115,<1",
+  "uvicorn>=0.30,<1",
+  "sqlalchemy>=2.0,<2.1",
+  "alembic>=1.13,<2",
+  "pydantic>=2.8,<3",
+  "pydantic-settings>=2.4,<3",
+  "httpx>=0.28.1,<0.29",
+  "websockets>=13",
+  # Ed25519 verification of Telnyx webhook signatures (adapters/telephony).
+  "PyNaCl>=1.5,<2",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.2,<4"]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.setuptools.package-data]
+app = ["migrations/*.mako"]

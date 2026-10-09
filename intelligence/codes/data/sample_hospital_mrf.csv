@@ -1,0 +1,8 @@
+hospital_name,last_updated_on,version,hospital_location,hospital_address,license_number|CA,"To the best of its knowledge and belief, the hospital has included all applicable standard charge information in accordance with the requirements of 45 CFR 180.50."
+Bayview Imaging Center (synthetic),2026-07-01,2.0.0,Bayview Imaging Center (synthetic),1 Example Way Bayview CA,SYN-0000,true
+description,code|1,code|1|type,code|2,code|2|type,modifiers,setting,drug_unit_of_measurement,drug_type_of_measurement,standard_charge|gross,standard_charge|discounted_cash,payer_name,plan_name,standard_charge|negotiated_dollar,standard_charge|negotiated_percentage,standard_charge|negotiated_algorithm,estimated_amount,standard_charge|methodology,standard_charge|min,standard_charge|max,additional_generic_notes
+MRI brain without and with contrast,70553,CPT,,,,outpatient,,,3200.00,2400.00,Acme Health Plan,Acme PPO,1850.00,,,,fee schedule,1500.00,2400.00,synthetic
+Anesthesia for non-invasive imaging,01922,CPT,,,,outpatient,,,900.00,700.00,Acme Health Plan,Acme PPO,520.00,,,,fee schedule,400.00,700.00,synthetic
+Hospital outpatient clinic visit,G0463,HCPCS,,,,outpatient,,,300.00,220.00,Acme Health Plan,Acme PPO,180.00,,,,fee schedule,150.00,220.00,synthetic
+"Injection, lorazepam hydrochloride, 2 mg",J2060,HCPCS,,,,outpatient,2,MG,50.00,35.00,Acme Health Plan,Acme PPO,22.00,,,,fee schedule,18.00,35.00,synthetic
+Unclassified drugs,J3490,HCPCS,,,,outpatient,,,60.00,45.00,Acme Health Plan,Acme PPO,30.00,,,,fee schedule,20.00,45.00,synthetic

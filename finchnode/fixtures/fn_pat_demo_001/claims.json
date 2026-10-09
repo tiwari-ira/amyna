@@ -1,0 +1,45 @@
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Claim",
+        "id": "CLM-2026-0915-001",
+        "status": "active",
+        "use": "claim",
+        "identifier": [{"system": "https://acme-health.example/claims", "value": "CLM-2026-0915-001"}],
+        "patient": {"reference": "Patient/fn_pat_demo_001"},
+        "billablePeriod": {"start": "2026-09-15", "end": "2026-09-15"},
+        "insurer": {"display": "Acme Health Plan"},
+        "provider": {"display": "Bayview Imaging Center (synthetic)"},
+        "item": [
+          {"sequence": 1, "productOrService": {"coding": [{"system": "http://www.ama-assn.org/go/cpt", "code": "70553", "display": "MRI brain without and with contrast"}]}, "servicedDate": "2026-09-15", "quantity": {"value": 1}, "net": {"value": 2400.00, "currency": "USD"}},
+          {"sequence": 2, "productOrService": {"coding": [{"system": "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets", "code": "J2060", "display": "Injection, lorazepam hydrochloride, 2 mg"}]}, "servicedDate": "2026-09-15", "quantity": {"value": 1}, "net": {"value": 35.00, "currency": "USD"}},
+          {"sequence": 3, "productOrService": {"coding": [{"system": "http://www.ama-assn.org/go/cpt", "code": "01922", "display": "Anesthesia for non-invasive imaging"}]}, "servicedDate": "2026-09-15", "quantity": {"value": 1}, "net": {"value": 780.00, "currency": "USD"}},
+          {"sequence": 4, "productOrService": {"coding": [{"system": "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets", "code": "G0463", "display": "Hospital outpatient clinic visit (facility fee)"}]}, "servicedDate": "2026-09-15", "quantity": {"value": 1}, "net": {"value": 250.00, "currency": "USD"}},
+          {"sequence": 5, "productOrService": {"coding": [{"system": "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets", "code": "G0463", "display": "Hospital outpatient clinic visit (facility fee)"}]}, "servicedDate": "2026-09-15", "quantity": {"value": 1}, "net": {"value": 250.00, "currency": "USD"}},
+          {"sequence": 6, "productOrService": {"coding": [{"system": "https://www.cms.gov/Medicare/Coding/HCPCSReleaseCodeSets", "code": "J3490", "display": "Unclassified drugs"}]}, "servicedDate": "2026-09-15", "quantity": {"value": 1}, "net": {"value": 40.00, "currency": "USD"}}
+        ],
+        "total": {"value": 3755.00, "currency": "USD"}
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Claim",
+        "id": "CLM-2026-0602-014",
+        "status": "active",
+        "use": "claim",
+        "identifier": [{"system": "https://acme-health.example/claims", "value": "CLM-2026-0602-014"}],
+        "patient": {"reference": "Patient/fn_pat_demo_001"},
+        "billablePeriod": {"start": "2026-06-02"},
+        "insurer": {"display": "Acme Health Plan"},
+        "provider": {"display": "Harbor Family Medicine (synthetic)"},
+        "item": [
+          {"sequence": 1, "productOrService": {"coding": [{"system": "http://www.ama-assn.org/go/cpt", "code": "99213", "display": "Office visit, established patient"}]}, "servicedDate": "2026-06-02", "quantity": {"value": 1}, "net": {"value": 150.00, "currency": "USD"}}
+        ],
+        "total": {"value": 150.00, "currency": "USD"}
+      }
+    }
+  ]
+}

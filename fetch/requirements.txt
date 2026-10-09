@@ -1,0 +1,8 @@
+# Fetch agents (Member 3). Core does not need these.
+# VERIFY against current docs: uagents 0.25.5 was checked against its installed
+# source (pydantic.v1 Model, uagents_core chat protocol path, on_rest_post,
+# Bureau, mailbox). 0.26.0 exists; re-verify before upgrading.
+uagents==0.25.5
+requests>=2.32,<3
+python-dotenv>=1.0,<2
+httpx>=0.28.1,<0.29

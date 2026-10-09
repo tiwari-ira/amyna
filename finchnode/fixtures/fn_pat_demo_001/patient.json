@@ -1,0 +1,7 @@
+{
+  "_note": "SYNTHETIC FinchNode-style FHIR R4 data for the Amyna demo. Not a real person.",
+  "resourceType": "Patient",
+  "id": "fn_pat_demo_001",
+  "name": [{"given": ["Jordan"], "family": "Rivera"}],
+  "address": [{"state": "CA"}]
+}

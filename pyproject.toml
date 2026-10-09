@@ -1,0 +1,57 @@
+# Repo-root project: packages the shared libraries (intelligence, finchnode,
+# fetch agent logic) and holds workspace-wide tool config (ruff, pytest).
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claimshield-libs"
+version = "0.1.0"
+description = "Amyna libraries: intelligence, finchnode client, fetch agent logic"
+requires-python = ">=3.11"
+dependencies = [
+  "claimshield-contracts",
+  "httpx>=0.28.1,<0.29",
+  "rapidfuzz>=3.9,<4",
+  "python-dotenv>=1.0,<2",
+]
+
+[tool.setuptools.packages.find]
+include = ["intelligence*", "finchnode*", "fetch*"]
+exclude = ["*.tests", "*.tests.*"]
+
+[tool.setuptools.package-data]
+"intelligence.codes" = ["data/*"]
+"intelligence.policy_rag" = ["sample_docs/*.md"]
+finchnode = ["fixtures/*/*.json"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["relay", "shared/ts", "**/node_modules", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"core/app/migrations/versions/*" = ["E501"]
+# FastAPI idiom: Depends(require_scopes(...)) in parameter defaults.
+"core/app/routers/*" = ["B008"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Header", "fastapi.Body"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "claimshield_contracts", "intelligence", "finchnode", "fetch"]
+
+[tool.pytest.ini_options]
+addopts = "-q --import-mode=importlib"
+# uagents-core pins httpx<0.29, so Starlette's TestClient httpx warning is expected.
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
+testpaths = [
+  "shared/python/tests",
+  "core/tests",
+  "intelligence/tests",
+  "finchnode/tests",
+  "fetch/tests",
+]

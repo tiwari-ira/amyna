@@ -1,0 +1,27 @@
+{
+  "hospital_name": "Bayview Imaging Center (synthetic)",
+  "last_updated_on": "2026-07-01",
+  "version": "2.0.0",
+  "hospital_location": ["Bayview Imaging Center (synthetic)"],
+  "standard_charge_information": [
+    {
+      "description": "MRI brain without and with contrast",
+      "code_information": [{"code": "70553", "type": "CPT"}],
+      "standard_charges": [
+        {
+          "setting": "outpatient",
+          "gross_charge": 3200.0,
+          "discounted_cash": 2400.0,
+          "payers_information": [
+            {"payer_name": "Acme Health Plan", "plan_name": "Acme PPO", "standard_charge_dollar": 1850.0, "methodology": "fee schedule"}
+          ]
+        }
+      ]
+    },
+    {
+      "description": "Hospital outpatient clinic visit",
+      "code_information": [{"code": "G0463", "type": "HCPCS"}],
+      "standard_charges": [{"setting": "outpatient", "gross_charge": 300.0, "discounted_cash": 220.0}]
+    }
+  ]
+}

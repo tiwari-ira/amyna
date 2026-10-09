@@ -1,0 +1,62 @@
+# ---- Secrets (never commit real values) ----
+.env
+.env.*
+*.env
+!.env.example
+!.env.staging.example
+!.env.production.example
+.envrc
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.seed
+*.secret
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+secrets/
+credentials.json
+credentials*.json
+*service-account*.json
+*serviceAccount*.json
+seeds/
+**/seeds.json
+**/*_seed.txt
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# ---- Local runtime data (SQLite DBs, uAgents storage, recordings) ----
+.data/
+*.db
+*.sqlite
+*.sqlite3
+agent*_data.json
+relay/data/
+recordings/
+
+# ---- Node ----
+node_modules/
+relay/dist/
+coverage/
+*.tsbuildinfo
+
+# ---- OS / editors ----
+.DS_Store
+.idea/
+.vscode/
+*.swp
