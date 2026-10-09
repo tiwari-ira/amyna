@@ -96,6 +96,10 @@ export async function onRecordingCompleted(
   }
   // Core makes this retry-safe: an already-stored transcript just re-runs extraction.
   const result = await ctx.core.completeVisit(convo.visitId, transcript);
+  convo.heardText = transcript.segments
+    .map((segment) => segment.text.trim())
+    .filter(Boolean)
+    .join(" ");
   if (result.status === "pending") {
     // FETCH_MODE=agentverse: the Visit Agent writes the evidence back to Core shortly.
     // Core takes no bill before that, so the patient waits here.
@@ -111,7 +115,7 @@ async function showVisitNotes(
   convo: Conversation,
   evidence: Schemas["EvidenceItem"][],
 ): Promise<void> {
-  await say(ctx, convo, copy.visitNotes(evidence));
+  await say(ctx, convo, copy.visitNotes(evidence, convo.heardText));
   convo.stage = "ready_for_bill";
 }
 

@@ -97,8 +97,12 @@ export const copy = {
   }),
   audioNotExpected:
     "Thanks, but I only use recordings right after you tap Record my visit. Send \"restart\" to start over.",
-  visitNotes: (evidence: { description: string; negated?: boolean }[]): OutboundMessage => ({
+  visitNotes: (
+    evidence: { description: string; negated?: boolean }[],
+    heard?: string,
+  ): OutboundMessage => ({
     text:
+      (heard?.trim() ? `Here's what I heard:\n"${heard.trim()}"\n\n` : "") +
       (evidence.length
         ? `Here's what I noted from your visit: ${listItems(evidence.map(describeEvidence))}.`
         : "I went through your visit but didn't hear any procedures, tests or medications to check your bill against.") +
