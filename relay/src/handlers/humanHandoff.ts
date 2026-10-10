@@ -7,7 +7,9 @@
 import type { PatientNotification } from "../coreClient";
 import type { Conversation } from "../store";
 import { renderNotification } from "../ux/messages";
-import { type HandlerContext, requireCase, serialize } from "./context";
+import { onFinchNodeConnected } from "./connect";
+import { type HandlerContext, patientScope, requireCase, serialize } from "./context";
+import { sendCaseReport } from "./patientReport";
 
 /** Notifications being sent right now (push and pull can race for the same one). */
 const inFlight = new Set<string>();
@@ -46,7 +48,7 @@ export interface CoreNotifyPayload {
   case: { case_id: string; channel: string; finchnode_patient_id: string };
 }
 
-/** POST /internal/notify (Core -> Relay service). */
+/** POST /internal/notify (Core -> Relay service). Throws when the platform send fails. */
 export async function onCoreNotify(
   ctx: HandlerContext,
   payload: CoreNotifyPayload,
@@ -58,7 +60,27 @@ export async function onCoreNotify(
   }
   return serialize(convo.userId, async () => {
     const ref = await deliverNotification(ctx, convo, payload.notification);
+    await afterNotification(ctx, convo, payload.notification);
     ctx.store.save();
     return { delivered: true, delivery_ref: ref };
   });
+}
+
+/** Advance the conversation for pushes that end or unblock a step. */
+async function afterNotification(
+  ctx: HandlerContext,
+  convo: Conversation,
+  notification: PatientNotification,
+): Promise<void> {
+  if (notification.kind === "final_report") {
+    // The conversation is over: add the itemized summary once, as the pull path does.
+    convo.stage = "done";
+    const core = await patientScope(ctx, convo.userId); // pushes carry no patient session
+    await sendCaseReport(ctx, convo, await core.getCase(notification.case_id));
+    return;
+  }
+  const event = notification.data?.event;
+  if (event === "finchnode_connected" && convo.stage === "awaiting_finchnode_connect") {
+    await onFinchNodeConnected(ctx, convo);
+  }
 }

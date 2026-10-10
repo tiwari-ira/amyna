@@ -35,6 +35,8 @@ export interface RelayConfig {
   visitPollMs: number;
   visitWaitMs: number;
   dataDir: string;
+  /** Ask for the patient's own number before an insurer call (the human-merge leg). */
+  askCallbackPhone: boolean;
 }
 
 export class ConfigError extends Error {}
@@ -64,7 +66,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RelayConfig {
     mode,
     appEnv,
     port: Number(get("RELAY_PORT", "3000")),
-    coreBaseUrl: get("CORE_BASE_URL", "http://localhost:8080"),
+    coreBaseUrl: get("CORE_BASE_URL", "http://localhost:8080").replace(/\/+$/, ""),
     serviceToken: get("RELAY_SERVICE_TOKEN", devDefaults ? DEV_RELAY_SERVICE_TOKEN : ""),
     coreWebhookSecret: get("CORE_WEBHOOK_SECRET", devDefaults ? DEV_CORE_WEBHOOK_SECRET : ""),
     relayAgentToken: get("RELAY_AGENT_TOKEN"),
@@ -75,6 +77,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RelayConfig {
     visitPollMs: Number(get("RELAY_VISIT_POLL_MS", "2000")),
     visitWaitMs: Number(get("RELAY_VISIT_WAIT_MS", "90000")),
     dataDir: get("RELAY_DATA_DIR", resolve(REPO_ROOT, "relay", "data")),
+    askCallbackPhone: get("RELAY_ASK_CALLBACK_PHONE", mode === "live" ? "true" : "false") === "true",
   };
   const missing: string[] = [];
   if (mode === "live") {

@@ -18,6 +18,7 @@ log = logging.getLogger("claimshield.notify")
 
 class RelayServiceNotifier(PatientNotifier):
     mode = "relay_service"
+    deferred = True
 
     def __init__(self, base_url: str, token: str, http: httpx.Client | None = None) -> None:
         self._url = base_url.rstrip("/") + "/internal/notify"
@@ -38,11 +39,12 @@ class RelayServiceNotifier(PatientNotifier):
                 self._url, json=payload, headers={"Authorization": f"Bearer {self._token}"}
             )
             response.raise_for_status()
-        except httpx.HTTPError as exc:
+            body = response.json() if response.content else {}
+        except (httpx.HTTPError, ValueError) as exc:
             log.warning(
                 "relay service delivery failed",
                 extra={"fields": {"case_id": case.case_id, "error": type(exc).__name__}},
             )
             return DeliveryResult(delivered=False, error=type(exc).__name__)
-        body = response.json()
+        body = body if isinstance(body, dict) else {}
         return DeliveryResult(delivered=bool(body.get("delivered", True)), ref=body.get("delivery_ref"))

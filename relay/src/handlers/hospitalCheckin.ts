@@ -3,6 +3,7 @@ import { BUTTONS, copy } from "../ux/messages";
 import type { Conversation } from "../store";
 import type { InboundEvent } from "../webhook";
 import { answerRecordingChoice } from "./appointmentRecording";
+import { checkConnect, isLinked } from "./connect";
 import { askDataConsent } from "./consent";
 import { type HandlerContext, say, serialize } from "./context";
 
@@ -18,6 +19,8 @@ const BUSY = new Set([
   "in_review",
   "awaiting_claim_id",
   "awaiting_data_consent",
+  "awaiting_finchnode_connect",
+  "awaiting_callback_phone",
 ]);
 
 export function isAtHospitalText(text: string | undefined): boolean {
@@ -159,10 +162,15 @@ async function promptHospital(ctx: HandlerContext, convo: Conversation, name: st
   }
   convo.lastHospitalName = name;
   convo.lastHospitalPromptAt = now;
-  if (!convo.finchnodePatientId) {
+  if (!isLinked(convo)) {
+    convo.wantRecording = true;
+    if (convo.connectMode) {
+      await say(ctx, convo, copy.hospitalNeedsLink);
+      await checkConnect(ctx, convo);
+      return;
+    }
     await say(ctx, convo, copy.hospitalNeedsId);
     convo.stage = "awaiting_patient_id";
-    convo.wantRecording = true;
     return;
   }
   await say(ctx, convo, copy.nearHospital(name));
@@ -174,12 +182,18 @@ export async function startRecordingFromHospital(
   convo: Conversation,
 ): Promise<void> {
   convo.wantRecording = true;
-  if (!convo.finchnodePatientId) {
+  if (!isLinked(convo)) {
+    if (convo.connectMode) {
+      await say(ctx, convo, copy.hospitalNeedsLink);
+      await checkConnect(ctx, convo);
+      return;
+    }
     await say(ctx, convo, copy.hospitalNeedsId);
     convo.stage = "awaiting_patient_id";
     return;
   }
-  if (!convo.caseId) {
+  if (!convo.caseId && convo.finchnodePatientId) {
+    // Typed-id flow only: with Connect the case exists from the first message.
     const created = await ctx.core.createCase({
       patient: { finchnode_patient_id: convo.finchnodePatientId },
       channel: "relay",

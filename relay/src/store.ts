@@ -5,12 +5,14 @@ import { dirname } from "node:path";
 export type Stage =
   | "new"
   | "awaiting_patient_id"
+  | "awaiting_finchnode_connect"
   | "awaiting_data_consent"
   | "awaiting_recording_choice"
   | "recording"
   | "processing_visit"
   | "ready_for_bill"
   | "awaiting_claim_id"
+  | "awaiting_callback_phone"
   | "in_review"
   | "done";
 
@@ -40,6 +42,13 @@ export interface Conversation {
   lastHospitalPromptAt?: number;
   /** A pin that arrived while another question was on screen. Checked once that question is done. */
   pendingPlace?: { latitude: number; longitude: number };
+  /** FinchNode Connect (sandbox/production): the open session and whether records are linked. */
+  connectSessionId?: string;
+  connectMode?: boolean;
+  recordsLinked?: boolean;
+  /** An approval waiting for the patient's callback number (asked once). */
+  pendingApproval?: { notificationId: string; eventId: string };
+  callbackAsked?: boolean;
   /** Core notifications already shown to the patient (rendered exactly once). */
   delivered: Record<string, DeliveredNotification>;
 }

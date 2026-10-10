@@ -3,15 +3,25 @@
 The ``text`` here is default copy. The Relay service may re-render it from
 ``kind`` + ``data`` (relay/src/ux/messages.ts). Buttons carry stable ids that
 come back on POST /relay/webhook as ``choice``.
+
+Network notifiers (``deferred``, i.e. NOTIFY_MODE=relay_service) deliver only
+AFTER the transaction that created the notification commits, on one background
+worker (so order is kept). The request never waits on the Relay service -- which
+may itself be waiting on this request -- the patient never hears about a change
+that rolled back, and no database lock is held during the HTTP call.
 """
 
+import logging
+from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
 from typing import TYPE_CHECKING
 
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from claimshield_contracts.enums import NotificationKind
 from claimshield_contracts.ids import new_id
-from claimshield_contracts.models import NotificationButton
+from claimshield_contracts.models import Case, NotificationButton, PatientNotification
 
 from ..audit import record_audit
 from ..mappers import case_to_model, dump_all, notification_to_model
@@ -19,6 +29,82 @@ from ..models_db import CaseRow, DisputeRow, InterventionRow, NotificationRow
 
 if TYPE_CHECKING:
     from ..container import Container
+
+log = logging.getLogger("claimshield.notify")
+
+_PENDING = "amyna.pending_notifications"
+_LISTENING = "amyna.pending_listeners"
+
+
+class NotificationDispatcher:
+    """Runs deliveries off the request thread, one at a time (keeps their order)."""
+
+    def __init__(self) -> None:
+        self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="amyna-notify")
+
+    def submit(self, work: Callable[[], None]) -> Future:
+        future = self._pool.submit(work)
+        future.add_done_callback(_log_failure)
+        return future
+
+    def drain(self, timeout: float = 10.0) -> None:
+        """Wait for everything queued so far (tests, shutdown)."""
+        self._pool.submit(lambda: None).result(timeout=timeout)
+
+
+def _log_failure(future: Future) -> None:
+    if future.exception() is not None:
+        log.error(
+            "notification delivery crashed",
+            extra={"fields": {"error": type(future.exception()).__name__}},
+        )
+
+
+def _deliver(container: "Container", notification: PatientNotification, case: Case) -> None:
+    """Send one stored notification and record the outcome in its own transaction."""
+    try:
+        result = container.notifier.send(notification, case)
+    except Exception as exc:  # notifiers must not raise; never lose the outcome if one does
+        log.warning("notifier raised", extra={"fields": {"error": type(exc).__name__}})
+        delivered, ref, error = False, None, type(exc).__name__
+    else:
+        delivered, ref, error = result.delivered, result.ref, result.error
+    with container.session_scope() as db:
+        row = db.get(NotificationRow, notification.notification_id)
+        if row is not None:
+            row.delivered = delivered
+            row.delivery_ref = ref
+        record_audit(
+            db,
+            actor="core",
+            action="notification.delivered" if delivered else "notification.delivery_failed",
+            case_id=case.case_id,
+            resource_type="notification",
+            resource_id=notification.notification_id,
+            details={"kind": notification.kind.value, "delivered": delivered, "error": error},
+        )
+
+
+def _dispatch_pending(session: Session) -> None:
+    for container, notification, case in session.info.pop(_PENDING, []):
+        container.notification_dispatcher.submit(
+            lambda c=container, n=notification, k=case: _deliver(c, n, k)
+        )
+
+
+def _drop_pending(session: Session) -> None:
+    session.info.pop(_PENDING, None)
+
+
+def _deliver_after_commit(
+    db: Session, container: "Container", notification: PatientNotification, case: Case
+) -> None:
+    if not db.info.get(_LISTENING):
+        event.listen(db, "after_commit", _dispatch_pending)
+        event.listen(db, "after_rollback", _drop_pending)
+        db.info[_LISTENING] = True
+    db.info.setdefault(_PENDING, []).append((container, notification, case))
+
 
 QUESTION_BUTTONS = [
     NotificationButton(id="YES", label="Yes"),
@@ -76,9 +162,15 @@ def notify(
     )
     db.add(row)
     db.flush()
-    result = container.notifier.send(notification_to_model(row), case_to_model(case))
-    row.delivered = result.delivered
-    row.delivery_ref = result.ref
+    notification, case_model = notification_to_model(row), case_to_model(case)
+    if getattr(container.notifier, "deferred", False):
+        _deliver_after_commit(db, container, notification, case_model)
+        details: dict[str, object] = {"kind": kind.value, "delivery": "after_commit"}
+    else:
+        result = container.notifier.send(notification, case_model)
+        row.delivered = result.delivered
+        row.delivery_ref = result.ref
+        details = {"kind": kind.value, "delivered": result.delivered, "error": result.error}
     if intervention is not None:
         intervention.notified = True
     record_audit(
@@ -88,7 +180,7 @@ def notify(
         case_id=case.id,
         resource_type="notification",
         resource_id=row.id,
-        details={"kind": kind.value, "delivered": result.delivered, "error": result.error},
+        details=details,
     )
     return row
 

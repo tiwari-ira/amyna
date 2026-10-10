@@ -81,6 +81,8 @@ export interface InboundEvent {
   locationShare?: "live" | "ended";
   /** An audio attachment (voice memo). `url` is a signed credential: never log it. */
   audio?: InboundAudio;
+  /** A photo or PDF the patient sent (e.g. a bill). Only the type is kept. */
+  attachment?: { mimeType: string };
 }
 
 export interface InboundAudio {
@@ -99,7 +101,9 @@ interface RelayEnvelope {
     chat_id?: string;
     chat?: { id?: string };
     handle?: string;
-    sender_handle?: { handle?: string };
+    /** Current sender field (docs.relayapp.im/events/message-received); sender_handle is deprecated. */
+    from_handle?: { handle?: string; kind?: string };
+    sender_handle?: { handle?: string; kind?: string };
     parts?: {
       type?: string;
       value?: unknown;
@@ -122,7 +126,12 @@ function chatIdFrom(data: RelayEnvelope["data"]): string | undefined {
 }
 
 function handleFrom(data: RelayEnvelope["data"]): string | undefined {
-  return data?.sender_handle?.handle ?? data?.handle;
+  return data?.from_handle?.handle ?? data?.sender_handle?.handle ?? data?.handle;
+}
+
+/** Another agent (not a person) wrote: never answer, or two agents can loop forever. */
+function fromAgent(data: RelayEnvelope["data"]): boolean {
+  return (data?.from_handle ?? data?.sender_handle)?.kind === "agent";
 }
 
 function parsePlace(parts: NonNullable<RelayEnvelope["data"]>["parts"]): InboundPlace | undefined {
@@ -156,7 +165,12 @@ function parseRelayEnvelope(event: RelayEnvelope): InboundEvent {
   if (event.event_type === "location.sharing.stopped" && from) {
     return { id: event.event_id, kind: "location_share", from, chatId, locationShare: "ended" };
   }
-  if (event.event_type !== "message.received" || data.direction !== "inbound" || !from) {
+  if (
+    event.event_type !== "message.received" ||
+    data.direction !== "inbound" ||
+    !from ||
+    fromAgent(data)
+  ) {
     return { id: event.event_id, kind: "ignored", from: from ?? "", ...(chatId ? { chatId } : {}) };
   }
   // A button tap arrives as a text part whose value is the button's label.
@@ -184,6 +198,11 @@ function parseRelayEnvelope(event: RelayEnvelope): InboundEvent {
       },
     };
   }
+  const document = parts.find(
+    (part) =>
+      part.type === "media" &&
+      (part.mime_type?.startsWith("image/") || part.mime_type === "application/pdf"),
+  );
   return {
     id: event.event_id,
     kind: "message",
@@ -192,6 +211,7 @@ function parseRelayEnvelope(event: RelayEnvelope): InboundEvent {
     ...(chatId ? { chatId } : {}),
     ...(place ? { place } : {}),
     ...(locationShare ? { locationShare } : {}),
+    ...(document ? { attachment: { mimeType: document.mime_type! } } : {}),
   };
 }
 

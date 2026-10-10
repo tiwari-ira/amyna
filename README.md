@@ -140,6 +140,9 @@ with a message naming the missing variable. Copy the right template:
 
 ### Key configuration
 
+Production-like demo on FinchNode's sandbox (hosted Connect, webhooks, a made-up
+itemized bill): [docs/FINCHNODE_SANDBOX_DEMO.md](docs/FINCHNODE_SANDBOX_DEMO.md).
+
 See [docs/SETUP_KEYS.md](docs/SETUP_KEYS.md) for the full list. The main ones:
 `FINCHNODE_MODE` (`mock|demo|sandbox|production`), `EXTRACTION_MODE` (`rules|ollama`),
 `FETCH_MODE` (`local_direct|agentverse`), `RELAY_MODE` (`mock|live`),

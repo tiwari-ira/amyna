@@ -96,3 +96,15 @@ def test_agent_blocked_on_ungrounded_medical_fact() -> None:
 def test_agent_blocked_from_saying_secrets() -> None:
     check = check_agent_utterance("The SSN is 123-45-6789.", FACTS)
     assert "sensitive:ssn" in check.violations
+
+
+def test_insurer_reference_numbers_are_not_mistaken_for_secrets() -> None:
+    """A bare 9-digit reference and a long non-card number are fine; real secrets aren't."""
+    from app.services.security_policy import reject_sensitive_reference
+
+    reject_sensitive_reference("482130917")  # 9 digits, no SSN separators
+    reject_sensitive_reference("2026091500000123")  # 16 digits, fails the card checksum
+    with pytest.raises(SensitiveDataRejected):
+        reject_sensitive_reference("123-45-6789")
+    assert contains_sensitive_data("card 4111 1111 1111 1111") == ["card_number"]
+    assert contains_sensitive_data("claim 2026091500000123") == []

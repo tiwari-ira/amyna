@@ -56,12 +56,49 @@ def _concept_text(concept: dict[str, Any] | None) -> str:
     return displays[0] if displays else ""
 
 
-def _to_date(value: str | None) -> date | None:
-    if not value:
+def safe_date(value: object) -> date | None:
+    """ISO date or datetime -> date; anything unusable -> None (never raises)."""
+    if not isinstance(value, str) or not value.strip():
         return None
-    if len(value) == 10:
-        return date.fromisoformat(value)
-    return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+    value = value.strip()
+    try:
+        if len(value) == 10:
+            return date.fromisoformat(value)
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).date()
+    except ValueError:
+        return None
+
+
+_to_date = safe_date
+
+US_STATES = frozenset(
+    "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV "  # noqa: SIM905
+    "NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY PR GU VI AS MP".split()
+)
+_STATE_NAMES = {
+    "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR", "california": "CA",
+    "colorado": "CO", "connecticut": "CT", "delaware": "DE", "district of columbia": "DC",
+    "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID", "illinois": "IL",
+    "indiana": "IN", "iowa": "IA", "kansas": "KS", "kentucky": "KY", "louisiana": "LA",
+    "maine": "ME", "maryland": "MD", "massachusetts": "MA", "michigan": "MI",
+    "minnesota": "MN", "mississippi": "MS", "missouri": "MO", "montana": "MT",
+    "nebraska": "NE", "nevada": "NV", "new hampshire": "NH", "new jersey": "NJ",
+    "new mexico": "NM", "new york": "NY", "north carolina": "NC", "north dakota": "ND",
+    "ohio": "OH", "oklahoma": "OK", "oregon": "OR", "pennsylvania": "PA",
+    "rhode island": "RI", "south carolina": "SC", "south dakota": "SD", "tennessee": "TN",
+    "texas": "TX", "utah": "UT", "vermont": "VT", "virginia": "VA", "washington": "WA",
+    "west virginia": "WV", "wisconsin": "WI", "wyoming": "WY", "puerto rico": "PR",
+}  # fmt: skip
+
+
+def us_state(value: object) -> str | None:
+    """Two-letter US state from a code or a full name; anything else -> None."""
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    if cleaned.upper() in US_STATES and len(cleaned) == 2:
+        return cleaned.upper()
+    return _STATE_NAMES.get(cleaned.lower())
 
 
 def _ref_id(reference: dict[str, Any] | None) -> str | None:
@@ -79,10 +116,16 @@ def to_cents(value: float | int | str | None) -> int:
 # --------------------------------------------------------------------------- patient
 
 
-def normalize_patient(patient: dict[str, Any], coverages: list[dict[str, Any]]) -> PatientRef:
+def normalize_patient(
+    patient: dict[str, Any], coverages: list[dict[str, Any]], patient_id: str | None = None
+) -> PatientRef:
     """Patient + first active Coverage -> PatientRef (payer, member ref, payer phone)."""
     names = patient.get("name") or [{}]
-    display = " ".join([*names[0].get("given", []), names[0].get("family", "")]).strip() or None
+    display = (
+        " ".join([*names[0].get("given", []), names[0].get("family", "")]).strip()
+        or names[0].get("text")
+        or None
+    )
     address = (patient.get("address") or [{}])[0]
     coverage = next((c for c in coverages if c.get("status", "active") == "active"), None) or {}
     payer_name = payer_phone = None
@@ -100,12 +143,12 @@ def normalize_patient(patient: dict[str, Any], coverages: list[dict[str, Any]]) 
             (t.get("value") for t in org.get("telecom", []) if t.get("system") == "phone"), None
         )
     return PatientRef(
-        finchnode_patient_id=patient["id"],
+        finchnode_patient_id=patient.get("id") or patient_id or "unknown",
         display_name=display,
         member_ref=coverage.get("subscriberId"),
         payer_name=payer_name,
         payer_phone=payer_phone,
-        state=address.get("state"),
+        state=us_state(address.get("state")),
     )
 
 
@@ -201,43 +244,52 @@ def normalize_records(resources: list[dict[str, Any]], patient_id: str) -> list[
 
 
 def normalize_claim(resource: dict[str, Any]) -> Claim:
-    """FHIR Claim / ExplanationOfBenefit -> Claim. Ids are FinchNode-scoped (``fn:``)."""
+    """FHIR Claim / ExplanationOfBenefit -> Claim. Ids are FinchNode-scoped (``fn:``).
+
+    Raises ``ValueError`` (never IndexError/KeyError) when the resource can't be placed
+    on a date; a claim with no coded items comes back with ``lines=[]`` (not itemized).
+    """
+    resource_id = str(resource.get("id") or "unknown")
     identifiers = resource.get("identifier") or [{}]
-    external_id = identifiers[0].get("value") or resource["id"]
+    external_id = identifiers[0].get("value") or resource_id
     period = resource.get("billablePeriod") or {}
-    claim_id = f"fn:{resource['id']}"
+    claim_id = f"fn:{resource_id}"
     lines = []
-    for item in resource.get("item", []):
+    for index, item in enumerate(resource.get("item", []), start=1):
         codes = codes_from_concept(item.get("productOrService"))
-        if not codes:
-            continue
         served = _to_date(item.get("servicedDate")) or _to_date(period.get("start"))
+        if not codes or served is None:
+            continue
         net = (item.get("net") or {}).get("value")
         if net is None:
             unit = (item.get("unitPrice") or {}).get("value", 0)
             net = Decimal(str(unit)) * Decimal(str((item.get("quantity") or {}).get("value", 1)))
+        sequence = int(item.get("sequence") or index)
         lines.append(
             ClaimLine(
-                line_id=f"{claim_id}:{item['sequence']}",
+                line_id=f"{claim_id}:{sequence}",
                 claim_id=claim_id,
-                line_number=int(item["sequence"]),
+                line_number=sequence,
                 code=codes[0],
                 description=codes[0].display or _concept_text(item.get("productOrService")),
                 date_of_service=served,
-                units=int((item.get("quantity") or {}).get("value", 1)),
+                units=max(1, round(float((item.get("quantity") or {}).get("value", 1)))),
                 billed_cents=to_cents(net),
                 modifiers=[
                     m["coding"][0]["code"] for m in item.get("modifier", []) if m.get("coding")
                 ],
             )
         )
+    served = _to_date(period.get("start")) or (lines[0].date_of_service if lines else None)
+    if served is None:
+        raise ValueError(f"claim {resource_id} has no service date")
     return Claim(
         claim_id=claim_id,
         external_claim_id=external_id,
         payer_name=(resource.get("insurer") or {}).get("display"),
         provider_name=(resource.get("provider") or {}).get("display"),
         facility_name=(resource.get("provider") or {}).get("display"),
-        date_of_service=_to_date(period.get("start")) or lines[0].date_of_service,
+        date_of_service=served,
         total_billed_cents=sum(line.billed_cents for line in lines),
         source=ClaimSource.FINCHNODE,
         lines=lines,

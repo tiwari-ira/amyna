@@ -120,22 +120,28 @@ describe("HTTP webhook", () => {
     servers.push(server);
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const { port } = server.address() as AddressInfo;
-    return (body: string) =>
-      fetch(`http://127.0.0.1:${port}/webhook/relay`, { method: "POST", body }).then(async (r) => ({
+    const call = (path: string, body: string, headers: Record<string, string> = {}) =>
+      fetch(`http://127.0.0.1:${port}${path}`, { method: "POST", body, headers }).then(async (r) => ({
         status: r.status,
-        json: (await r.json()) as { status?: string },
+        json: (await r.json()) as { status?: string; delivered?: boolean },
       }));
+    return {
+      server,
+      post: (body: string) => call("/webhook/relay", body),
+      notify: (body: unknown) =>
+        call("/internal/notify", JSON.stringify(body), { Authorization: `Bearer ${ctx.config.serviceToken}` }),
+    };
   }
 
   it("rejects malformed events with 400 (no retry storm)", async () => {
-    const post = await serve(setup().ctx);
+    const { post } = await serve(setup().ctx);
     expect((await post("{not json")).status).toBe(400);
     expect((await post(JSON.stringify({ type: "message" }))).status).toBe(400);
   });
 
-  it("releases a failed event for the platform retry and dedupes after success", async () => {
-    const { core, ctx } = setup();
-    const post = await serve(ctx);
+  it("acknowledges before working, dedupes, and asks the patient to resend after a failure", async () => {
+    const { core, relay, ctx } = setup();
+    const { server, post } = await serve(ctx);
     const createCase = core.createCase.bind(core);
     let failures = 1;
     core.createCase = async () => {
@@ -144,9 +150,54 @@ describe("HTTP webhook", () => {
     };
     const hi = JSON.stringify({ id: "evt_hi", type: "message", from: "u1", text: "hi" });
     const id = JSON.stringify({ id: "evt_id", type: "message", from: "u1", text: "fn_pat_demo_001" });
-    expect((await post(hi)).json.status).toBe("processed");
-    expect((await post(id)).status).toBe(500);
-    expect((await post(id)).json.status).toBe("processed");
+    expect((await post(hi)).json.status).toBe("accepted");
+    expect((await post(id)).json.status).toBe("accepted"); // answered before Core is called
+    await server.idle();
+    expect(relay.outbox.at(-1)?.message.text).toMatch(/send that again/);
+    expect((await post(id)).json.status).toBe("accepted"); // released: a replay is handled
+    await server.idle();
+    expect(ctx.store.get("u1").caseId).toBe(CASE);
     expect((await post(id)).json.status).toBe("duplicate");
+  });
+
+  it("answers Core's push at once and delivers it in the background", async () => {
+    const { core, relay, ctx, send } = setup();
+    await toClaimPrompt(send);
+    const { server, notify } = await serve(ctx);
+    core.note("status_update", "Pushed while you wait.");
+    const pushed = core.notes.at(-1)!;
+    const reply = await notify({ notification: pushed, case: { case_id: CASE, channel: "relay", finchnode_patient_id: "x" } });
+    expect(reply.status).toBe(202);
+    await server.idle();
+    expect(relay.outbox.at(-1)?.message.text).toBe("Pushed while you wait.");
+  });
+
+  it("reports a failed push back to Core as a delivery_status event", async () => {
+    const { core, relay, ctx, send } = setup();
+    await toClaimPrompt(send);
+    const { server, notify } = await serve(ctx);
+    relay.sendMessage = async () => {
+      throw new Error("platform down");
+    };
+    core.note("status_update", "This send fails.");
+    const pushed = core.notes.at(-1)!;
+    expect((await notify({ notification: pushed, case: { case_id: CASE, channel: "relay", finchnode_patient_id: "x" } })).status).toBe(202);
+    await server.idle();
+    expect(core.events.at(-1)).toMatchObject({
+      event_type: "delivery_status",
+      notification_id: pushed.notification_id,
+      choice: "failed",
+    });
+  });
+
+  it("leaves a push for an unknown case in Core's outbox", async () => {
+    const { ctx } = setup();
+    const { notify } = await serve(ctx);
+    const reply = await notify({
+      notification: { notification_id: "ntf_x", case_id: "case_other", kind: "status_update", text: "x", created_at: "" },
+      case: { case_id: "case_other", channel: "relay", finchnode_patient_id: "x" },
+    });
+    expect(reply.status).toBe(200);
+    expect(reply.json.delivered).toBe(false);
   });
 });

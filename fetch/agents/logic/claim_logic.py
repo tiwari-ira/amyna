@@ -1,5 +1,6 @@
 """Claim Agent logic: claim + FinchNode records + visit evidence -> findings."""
 
+import logging
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
@@ -21,6 +22,10 @@ from intelligence.codes.hospital_ingest import find_price_index
 from intelligence.codes.resolver import CodeResolver, default_resolver
 from intelligence.discrepancy.engine import EngineConfig, analyze_claim
 from intelligence.policy_rag.retrieve import PolicyRetriever, cite_findings, default_retriever
+
+log = logging.getLogger("claimshield.agents.claim")
+#: Error prefix Core maps to ``finchnode_records_unavailable`` (retry later; nothing recorded).
+RECORDS_UNAVAILABLE = "records_unavailable"
 
 
 @dataclass
@@ -61,28 +66,35 @@ def _response(
     )
 
 
-def _pull_patient_records(tools: CoreTools, data: PatientDataRequest) -> tuple[list, list[str]]:
+def _pull_patient_records(
+    tools: CoreTools, data: PatientDataRequest
+) -> tuple[list, list[str], dict[str, str]]:
     """Pull encounters/procedures/medications CONCURRENTLY (prompt task 11).
 
-    Independent network inputs run in parallel with the same correlation id;
-    a failed source never loses the successful ones -- analysis proceeds with
-    what came back and the failed source names are returned for the run log.
+    Independent network inputs run in parallel with the same correlation id.
+    Returns (records, failed source names, incomplete sources -> FinchNode's reason).
+    The caller must not treat a failed or incomplete source as "nothing on file".
     """
     pulls = {
-        "encounters": lambda: tools.get_patient_encounters(data).records,
-        "procedures": lambda: tools.get_patient_procedures(data).records,
-        "medications": lambda: tools.get_patient_medications(data).records,
+        "encounters": lambda: tools.get_patient_encounters(data),
+        "procedures": lambda: tools.get_patient_procedures(data),
+        "medications": lambda: tools.get_patient_medications(data),
     }
     records: list = []
     failed: list[str] = []
+    gaps: dict[str, str] = {}
     with ThreadPoolExecutor(max_workers=3, thread_name_prefix="claim-records") as pool:
         futures = {name: pool.submit(fn) for name, fn in pulls.items()}
         for name, future in futures.items():
             try:
-                records.extend(future.result())
+                result = future.result()
             except CoreToolError:
                 failed.append(name)
-    return records, failed
+                continue
+            records.extend(result.records)
+            if not result.complete:
+                gaps[name] = result.gap or "incomplete"
+    return records, failed, gaps
 
 
 def handle_claim_analysis_request(
@@ -107,9 +119,24 @@ def handle_claim_analysis_request(
                 case_state=case.state.value,
             )
         data = PatientDataRequest(case_id=req.case_id)
-        records, failed_sources = _pull_patient_records(tools, data)
-        if len(failed_sources) == 3:
-            return _response(req, case, error="all record pulls failed")
+        records, failed_sources, gaps = _pull_patient_records(tools, data)
+        if failed_sources:
+            # Findings are recorded once and then reused, so never analyze on a partial
+            # pull: a missing source would read as "not in your records".
+            log.warning(
+                "claim analysis postponed: record pull failed",
+                extra={"fields": {"case_id": req.case_id, "failed": failed_sources}},
+            )
+            return _response(
+                req,
+                case,
+                error=f"{RECORDS_UNAVAILABLE}: could not load {', '.join(failed_sources)}",
+            )
+        if gaps:
+            log.info(
+                "analyzing with incomplete FinchNode records",
+                extra={"fields": {"case_id": req.case_id, "gaps": gaps}},
+            )
         claim = case.claim
         analysis = analyze_claim(
             claim,
@@ -123,6 +150,7 @@ def handle_claim_analysis_request(
                 else None
             ),
             config=deps.config,
+            records_complete=not gaps,
         )
         findings = cite_findings(
             analysis.findings,

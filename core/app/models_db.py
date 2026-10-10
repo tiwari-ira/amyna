@@ -13,6 +13,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from .db import Base, utcnow
 
 ID = String(40)
+#: ``cases.finchnode_patient_id`` placeholder while the patient is still in FinchNode
+#: Connect (the real subject arrives with consent.granted). Never sent to FinchNode.
+PENDING_CONNECT_PREFIX = "pending-connect:"
 
 
 def _created() -> Mapped[datetime]:
@@ -66,6 +69,8 @@ class CaseRow(Base):
     member_ref: Mapped[str | None] = mapped_column(String(80))
     payer_name: Mapped[str | None] = mapped_column(String(200))
     payer_phone: Mapped[str | None] = mapped_column(String(32))
+    # The patient's own number, confirmed by the patient, for the human merge leg.
+    patient_phone: Mapped[str | None] = mapped_column(String(32))
     patient_state: Mapped[str | None] = mapped_column(String(2))
     external_ref: Mapped[str | None] = mapped_column(String(120))
     failure_reason: Mapped[str | None] = mapped_column(Text)
@@ -363,6 +368,34 @@ class JobRow(Base):
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = _created()
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class FinchConnectSessionRow(Base):
+    """A FinchNode hosted Connect session started for a case (the patient's link)."""
+
+    __tablename__ = "finch_connect_sessions"
+
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)  # FinchNode's cs_... id
+    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), index=True)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True)
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    subject: Mapped[str | None] = mapped_column(String(80), index=True)
+    url: Mapped[str] = mapped_column(Text)
+    environment: Mapped[str | None] = mapped_column(String(16))
+    expires_at: Mapped[str | None] = mapped_column(String(40))
+    created_at: Mapped[datetime] = _created()
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class FinchNodeWebhookEventRow(Base):
+    """Idempotency ledger for POST /finchnode/webhook (FinchNode retries ~41 h)."""
+
+    __tablename__ = "finchnode_webhook_events"
+
+    event_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(64))
+    result: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    received_at: Mapped[datetime] = _created()
 
 
 class WebhookEventRow(Base):

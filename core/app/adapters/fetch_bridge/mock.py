@@ -99,6 +99,12 @@ class LocalDirectFetchBridge(FetchBridge):
     @staticmethod
     def _result(ok: bool, error: str | None, agent: str) -> BridgeResult:
         if not ok:
+            if (error or "").startswith("records_unavailable"):
+                # FinchNode could not provide every record type; nothing was recorded.
+                raise UpstreamError(
+                    "Some of the patient's FinchNode records could not be loaded; try again.",
+                    code="finchnode_records_unavailable",
+                )
             raise UpstreamError(f"{agent} Agent logic failed: {error}", code="agent_failed")
         return BridgeResult(status=WorkStatus.COMPLETED)
 

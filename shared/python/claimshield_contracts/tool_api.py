@@ -169,6 +169,10 @@ class PatientDataRequest(ToolRequest):
 
 class PatientRecords(ContractModel):
     records: list[HealthRecord]
+    #: False when FinchNode could not provide this record type completely (not shared,
+    #: partial sync, source outage...). Absence in ``records`` then proves nothing.
+    complete: bool = True
+    gap: str | None = None
 
 
 class PatientClaims(ContractModel):

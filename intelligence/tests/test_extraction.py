@@ -3,6 +3,7 @@
 import json
 
 import httpx
+import pytest
 
 from claimshield_contracts.enums import EvidenceKind, Speaker
 from claimshield_contracts.models import Transcript
@@ -105,3 +106,31 @@ def test_ollama_unknown_segment_falls_back(transcript: Transcript) -> None:
 def test_build_extractor_modes() -> None:
     assert build_extractor("rules").name == "rules"
     assert build_extractor("ollama").name.startswith("ollama:")
+
+
+@pytest.mark.parametrize(
+    ("sentence", "term", "negated"),
+    [
+        ("Not to worry, the anesthesiologist will be with you.", "anesthesiologist", False),
+        ("Don't worry, we'll give you lorazepam.", "lorazepam", False),
+        ("No anesthesia, just lorazepam.", "lorazepam", False),
+        ("We didn't do the MRI but we gave lorazepam.", "lorazepam", False),
+        ("You won't need anesthesia for this scan.", "anesthesia", True),
+        ("We will not need Dr. Lee's anesthesia team.", "anesthesia", True),
+        ("No IV, no contrast.", "contrast", True),
+    ],
+)
+def test_negation_stays_inside_its_clause(sentence: str, term: str, negated: bool) -> None:
+    """Reassurances and earlier clauses never negate a later term."""
+    from intelligence.extraction.rule_based import _negated
+
+    assert _negated(sentence, sentence.index(term)) is negated
+
+
+def test_abbreviations_do_not_split_sentences() -> None:
+    from intelligence.extraction.rule_based import split_sentences
+
+    assert split_sentences("Dr. Patel gave lorazepam. Then we left.") == [
+        "Dr. Patel gave lorazepam.",
+        "Then we left.",
+    ]

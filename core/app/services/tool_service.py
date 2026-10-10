@@ -20,6 +20,7 @@ from claimshield_contracts.enums import (
     CaseState,
     ConsentType,
     PatientDecision,
+    RecordType,
 )
 from claimshield_contracts.ids import new_id
 from claimshield_contracts.models import (
@@ -305,20 +306,27 @@ class ToolService:
             claims = self._c.finchnode.get_patient_claims(self._patient_id(db, req.case_id))
             return PatientClaims(claims=claims)
 
+    def _records(self, pid: str, record_type: RecordType, records: list) -> PatientRecords:
+        gap = self._c.finchnode.record_gaps(pid).get(record_type)
+        return PatientRecords(records=records, complete=gap is None, gap=gap)
+
     def get_patient_encounters(self, req: PatientDataRequest) -> PatientRecords:
         with self._tx(ToolName.GET_PATIENT_ENCOUNTERS, req.case_id, req.agent_run) as db:
             pid = self._patient_id(db, req.case_id)
-            return PatientRecords(records=self._c.finchnode.get_patient_encounters(pid))
+            records = self._c.finchnode.get_patient_encounters(pid)
+            return self._records(pid, RecordType.ENCOUNTER, records)
 
     def get_patient_procedures(self, req: PatientDataRequest) -> PatientRecords:
         with self._tx(ToolName.GET_PATIENT_PROCEDURES, req.case_id, req.agent_run) as db:
             pid = self._patient_id(db, req.case_id)
-            return PatientRecords(records=self._c.finchnode.get_patient_procedures(pid))
+            records = self._c.finchnode.get_patient_procedures(pid)
+            return self._records(pid, RecordType.PROCEDURE, records)
 
     def get_patient_medications(self, req: PatientDataRequest) -> PatientRecords:
         with self._tx(ToolName.GET_PATIENT_MEDICATIONS, req.case_id, req.agent_run) as db:
             pid = self._patient_id(db, req.case_id)
-            return PatientRecords(records=self._c.finchnode.get_patient_medications(pid))
+            records = self._c.finchnode.get_patient_medications(pid)
+            return self._records(pid, RecordType.MEDICATION, records)
 
     # ------------------------------------------------------------------ analysis
 

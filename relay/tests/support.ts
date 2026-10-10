@@ -1,6 +1,6 @@
 /** Test support: a stub Core that mimics Core's notification flow, plus a handler context. */
 import { loadConfig } from "../src/config";
-import type { CaseDetail, PatientNotification, Schemas } from "../src/coreClient";
+import { CoreError, type CaseDetail, type PatientNotification, type Schemas } from "../src/coreClient";
 import type { CoreApi, HandlerContext } from "../src/handlers/context";
 import { handleIncoming } from "../src/handlers/incomingMessage";
 import { MockTranscriber, type Transcriber } from "../src/handlers/transcription";
@@ -28,6 +28,14 @@ export class StubCore implements CoreApi {
   ingested = 0;
   visits: Schemas["VisitCreate"][] = [];
   transcripts: Schemas["VisitComplete"][] = [];
+  /** FinchNode Connect (off = mock/demo typed ids, like Core's connect_unavailable). */
+  connectEnabled = false;
+  connectStatus = "pending";
+  connectCalls = 0;
+  bills: Schemas["FinchNodeClaimSummary"][] = [];
+  claim: Record<string, unknown> | null = null;
+  phone: string | null = null;
+  ingestError: CoreError | null = null;
 
   note(kind: PatientNotification["kind"], text: string, extra: Partial<PatientNotification> = {}) {
     this.notes.push({
@@ -80,9 +88,38 @@ export class StubCore implements CoreApi {
     return { evidence: [{ description: "lorazepam (dose 1 mg)", negated: false }] } as Schemas["VisitEvidenceResult"];
   }
   async ingestClaim() {
+    if (this.ingestError) throw this.ingestError;
     this.ingested += 1;
     this.state = "CLAIM_RECEIVED";
     return { claim_id: "clm_1" } as Schemas["Claim"];
+  }
+  async finchnodeClaims() {
+    return { claims: this.bills, complete: true } as Schemas["FinchNodeClaims"];
+  }
+  async setCallbackPhone(_caseId: string, phone: string) {
+    if (phone.replace(/\D/g, "").length < 10) throw new CoreError(422, "invalid_phone", "bad number");
+    this.phone = phone;
+    return { case_id: CASE, callback_phone_masked: "+1••••••0123" } as Schemas["Case"];
+  }
+  private session() {
+    return {
+      session_id: "cs_1",
+      case_id: CASE,
+      url: "https://finchnode.com/connect/cs_1",
+      status: this.connectStatus,
+      connected: this.connectStatus === "completed",
+    } as Schemas["FinchNodeConnectSession"];
+  }
+  async startFinchNodeConnect() {
+    if (!this.connectEnabled) throw new CoreError(409, "connect_unavailable", "typed ids");
+    this.connectCalls += 1;
+    return this.session();
+  }
+  async getFinchNodeConnect() {
+    if (this.connectStatus === "completed" && !this.notes.some((n) => n.data?.event === "finchnode_connected")) {
+      this.note("status_update", "Your health records are connected.", { data: { event: "finchnode_connected" } });
+    }
+    return this.session();
   }
   async analyzeClaim() {
     if (this.state === "CLAIM_RECEIVED") {
@@ -95,7 +132,15 @@ export class StubCore implements CoreApi {
     return this.notes;
   }
   async getCase() {
-    return { case_id: CASE, state: this.state, dispute: this.dispute, calls: this.calls, findings: [] } as unknown as CaseDetail;
+    return {
+      case_id: CASE,
+      state: this.state,
+      dispute: this.dispute,
+      calls: this.calls,
+      findings: [],
+      claim: this.claim,
+      callback_phone_masked: this.phone ? "+1••••••0123" : null,
+    } as unknown as CaseDetail;
   }
   async prepareDispute() {
     this.state = "AWAITING_APPROVAL";

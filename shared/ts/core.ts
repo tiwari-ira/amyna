@@ -55,7 +55,7 @@ export interface paths {
         put?: never;
         /**
          * Start Session
-         * @description Issue an opaque session token (demo environments; disabled in prod).
+         * @description Issue an opaque patient session token (Relay handles: any environment).
          */
         post: operations["start_session_auth_session_post"];
         delete?: never;
@@ -98,6 +98,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cases/{case_id}/callback-phone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Callback Phone
+         * @description The patient's own number for joining an insurer call when it pauses for them
+         *     (replaces the single HUMAN_HANDOFF_PHONE for this case).
+         */
+        put: operations["set_callback_phone_cases__case_id__callback_phone_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cases/{case_id}/consents": {
         parameters: {
             query?: never;
@@ -112,6 +133,29 @@ export interface paths {
          * @description Record a patient consent (health data access or visit recording).
          */
         post: operations["record_consent_cases__case_id__consents_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/{case_id}/finchnode/claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Finchnode Claims
+         * @description The patient's bills on FinchNode, newest first (needs health-data consent).
+         *
+         *     FinchNode bills are summaries: ``itemized=false`` means the patient must send the
+         *     itemized statement before Amyna can check it.
+         */
+        get: operations["get_finchnode_claims_cases__case_id__finchnode_claims_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -283,6 +327,73 @@ export interface paths {
         put?: never;
         /** Reject Dispute */
         post: operations["reject_dispute_disputes__dispute_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finchnode/connect-sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Connect Session
+         * @description Start linking the signed-in patient's health records (FinchNode hosted Connect).
+         *
+         *     Send the patient to ``url``. Linking finishes when FinchNode sends
+         *     ``consent.granted`` (POST /finchnode/webhook) or when the session is read back.
+         *     ``409 connect_unavailable`` in mock/demo modes, where patients type their id.
+         */
+        post: operations["create_connect_session_finchnode_connect_sessions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finchnode/connect-sessions/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Connect Session
+         * @description Read a session back from FinchNode; finishes linking if the patient is done.
+         */
+        get: operations["get_connect_session_finchnode_connect_sessions__session_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finchnode/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finchnode Webhook
+         * @description FinchNode lifecycle events (consent.granted, records.updated, consent.revoked...).
+         *
+         *     Signed with the application's ``whsec_`` secret (FINCHNODE_WEBHOOK_SECRET).
+         *     Answers 204 for a new event and 200 for a duplicate, before doing the work.
+         */
+        post: operations["finchnode_webhook_finchnode_webhook_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1163,8 +1274,18 @@ export interface components {
             /** Text */
             text: string;
         };
+        /**
+         * CallbackPhoneIn
+         * @description The patient's own number, confirmed by the patient, for joining an insurer call.
+         */
+        CallbackPhoneIn: {
+            /** Phone */
+            phone: string;
+        };
         /** Case */
         Case: {
+            /** Callback Phone Masked */
+            callback_phone_masked?: string | null;
             /** Case Id */
             case_id: string;
             channel: components["schemas"]["Channel"];
@@ -1176,6 +1297,11 @@ export interface components {
             /** External Ref */
             external_ref?: string | null;
             patient: components["schemas"]["PatientRef"];
+            /**
+             * Records Linked
+             * @default true
+             */
+            records_linked?: boolean;
             state: components["schemas"]["CaseState"];
             /**
              * Updated At
@@ -1198,6 +1324,8 @@ export interface components {
         CaseDetail: {
             /** Agent Runs */
             agent_runs?: components["schemas"]["AgentRun"][];
+            /** Callback Phone Masked */
+            callback_phone_masked?: string | null;
             /** Calls */
             calls?: components["schemas"]["CallSession"][];
             /** Case Id */
@@ -1223,6 +1351,11 @@ export interface components {
             /** Line Assessments */
             line_assessments?: components["schemas"]["LineAssessment"][];
             patient: components["schemas"]["PatientRef"];
+            /**
+             * Records Linked
+             * @default true
+             */
+            records_linked?: boolean;
             state: components["schemas"]["CaseState"];
             /**
              * Updated At
@@ -1706,6 +1839,70 @@ export interface components {
          * @enum {string}
          */
         EvidenceSource: "visit_transcript" | "finchnode_record" | "claim" | "patient_statement" | "policy_document" | "insurer_call";
+        /**
+         * FinchNodeClaimSummary
+         * @description One bill on the patient's FinchNode records (to let the patient pick it).
+         */
+        FinchNodeClaimSummary: {
+            /**
+             * Date Of Service
+             * Format: date
+             */
+            date_of_service: string;
+            /** External Claim Id */
+            external_claim_id: string;
+            /** Itemized */
+            itemized: boolean;
+            /** Payer Name */
+            payer_name?: string | null;
+            /** Provider Name */
+            provider_name?: string | null;
+            /** Total Billed Cents */
+            total_billed_cents: number;
+        };
+        /** FinchNodeClaims */
+        FinchNodeClaims: {
+            /** Claims */
+            claims: components["schemas"]["FinchNodeClaimSummary"][];
+            /**
+             * Complete
+             * @default true
+             */
+            complete?: boolean;
+            /** Gap */
+            gap?: string | null;
+        };
+        /**
+         * FinchNodeConnectCreate
+         * @description Start (or restart) linking a patient's health records through FinchNode Connect.
+         *
+         *     Without ``case_id`` Core opens a new case for the signed-in patient; it gets its
+         *     FinchNode identity when the patient finishes Connect.
+         */
+        FinchNodeConnectCreate: {
+            /** Case Id */
+            case_id?: string | null;
+            /** Return Url */
+            return_url?: string | null;
+        };
+        /** FinchNodeConnectSession */
+        FinchNodeConnectSession: {
+            /** Case Id */
+            case_id: string;
+            /**
+             * Connected
+             * @default false
+             */
+            connected?: boolean;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Session Id */
+            session_id: string;
+            /** Status */
+            status: string;
+            /** Url */
+            url: string;
+        };
         /** FindOrCreateCaseRequest */
         FindOrCreateCaseRequest: {
             agent_run?: components["schemas"]["AgentRunRef"] | null;
@@ -2159,6 +2356,13 @@ export interface components {
         };
         /** PatientRecords */
         PatientRecords: {
+            /**
+             * Complete
+             * @default true
+             */
+            complete?: boolean;
+            /** Gap */
+            gap?: string | null;
             /** Records */
             records: components["schemas"]["HealthRecord"][];
         };
@@ -2778,6 +2982,41 @@ export interface operations {
             };
         };
     };
+    set_callback_phone_cases__case_id__callback_phone_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CallbackPhoneIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Case"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     record_consent_cases__case_id__consents_post: {
         parameters: {
             query?: never;
@@ -2800,6 +3039,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Consent"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_finchnode_claims_cases__case_id__finchnode_claims_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinchNodeClaims"];
                 };
             };
             /** @description Validation Error */
@@ -3101,6 +3371,88 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    create_connect_session_finchnode_connect_sessions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinchNodeConnectCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinchNodeConnectSession"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_connect_session_finchnode_connect_sessions__session_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinchNodeConnectSession"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    finchnode_webhook_finchnode_webhook_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

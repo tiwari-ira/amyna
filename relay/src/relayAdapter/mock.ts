@@ -22,7 +22,7 @@ export class MockRelayAdapter implements RelayAdapter {
   async sendMessage(to: string, message: OutboundMessage): Promise<{ id: string }> {
     this.outbox.push({ to, message });
     if (this.print) {
-      const buttons = message.buttons?.map((b) => `[${b.label}]`).join(" ") ?? "";
+      const buttons = message.buttons?.map((b) => (b.url ? `[${b.label} -> ${b.url}]` : `[${b.label}]`)).join(" ") ?? "";
       console.log(`\nrelay -> ${to}:\n${message.text}${buttons ? `\n${buttons}` : ""}`);
     }
     this.counter += 1;

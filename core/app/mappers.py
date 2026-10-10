@@ -30,8 +30,10 @@ from claimshield_contracts.models import (
     Dispute as DisputeModel,
 )
 
+from .audit import mask_phone
 from .db import as_utc
 from .models_db import (
+    PENDING_CONNECT_PREFIX,
     AgentRunRow,
     CallRow,
     CaseRow,
@@ -73,6 +75,8 @@ def case_to_model(row: CaseRow) -> Case:
             state=row.patient_state,
         ),
         external_ref=row.external_ref,
+        callback_phone_masked=mask_phone(row.patient_phone),
+        records_linked=not row.finchnode_patient_id.startswith(PENDING_CONNECT_PREFIX),
         created_at=as_utc(row.created_at),
         updated_at=as_utc(row.updated_at),
     )

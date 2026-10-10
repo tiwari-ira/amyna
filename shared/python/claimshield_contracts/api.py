@@ -135,6 +135,52 @@ class ClaimIngest(InputModel):
         return self
 
 
+class FinchNodeClaimSummary(ContractModel):
+    """One bill on the patient's FinchNode records (to let the patient pick it)."""
+
+    external_claim_id: str
+    provider_name: str | None = None
+    payer_name: str | None = None
+    date_of_service: date
+    total_billed_cents: int
+    #: FinchNode claim records carry no line items; such a bill needs the itemized
+    #: statement uploaded (source=upload) before it can be checked.
+    itemized: bool
+
+
+class FinchNodeClaims(ContractModel):
+    claims: list[FinchNodeClaimSummary]
+    #: False when FinchNode could not load the claims category completely.
+    complete: bool = True
+    gap: str | None = None
+
+
+class FinchNodeConnectCreate(InputModel):
+    """Start (or restart) linking a patient's health records through FinchNode Connect.
+
+    Without ``case_id`` Core opens a new case for the signed-in patient; it gets its
+    FinchNode identity when the patient finishes Connect."""
+
+    case_id: str | None = None
+    return_url: str | None = Field(default=None, max_length=2048)
+
+
+class FinchNodeConnectSession(ContractModel):
+    session_id: str
+    case_id: str
+    #: Send the patient here (FinchNode's hosted consent pages). Expires after 24 h.
+    url: str
+    status: str
+    connected: bool = False
+    expires_at: str | None = None
+
+
+class CallbackPhoneIn(InputModel):
+    """The patient's own number, confirmed by the patient, for joining an insurer call."""
+
+    phone: str = Field(min_length=7, max_length=32)
+
+
 class ClaimAnalysisResult(ContractModel):
     status: WorkStatus
     case_state: CaseState

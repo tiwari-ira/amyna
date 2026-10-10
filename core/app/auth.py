@@ -37,6 +37,7 @@ FETCH_TOOLS: frozenset[ToolName] = frozenset(ToolName) - {ToolName.RECORD_INSURE
 SCOPES: dict[ServiceName, frozenset[str]] = {
     ServiceName.RELAY: frozenset(
         {
+            "sessions:issue",
             "assistant:use",
             "cases:read",
             "cases:write",

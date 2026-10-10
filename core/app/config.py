@@ -82,9 +82,17 @@ class Settings(BaseSettings):
     # demo roster's current payer line from finchnode/fixtures + contracts
     # demo_scenario.json (+12487208903). Comma-separated E.164 list.
     telephony_allowed_numbers: str = "+15555550100,+12487208903"
+    # Insurer phone directory used when the records carry no payer phone (FinchNode
+    # coverage never does): "Payer Name=+1...;Other Payer=+1...". Numbers must
+    # still be in TELEPHONY_ALLOWED_NUMBERS.
+    payer_phones: str = ""
     # Human merge: a handoff (SSN/PIN request...) dials this phone and
     # bridges the human into the call. Must also be in TELEPHONY_ALLOWED_NUMBERS.
     human_handoff_phone: str = ""
+    # true => the human merge may dial the case's own patient-confirmed callback number
+    # even when it is not in TELEPHONY_ALLOWED_NUMBERS (one number per patient instead
+    # of a single team phone). false => that number must be allowlisted too.
+    telephony_allow_patient_phones: bool = False
     # Safe window for the human to answer the merge call. If the human has not
     # connected by then, the merge escalates to MERGE_FAILED (the patient is
     # notified, the insurer leg is kept alive per policy, and the AI is never
@@ -110,6 +118,16 @@ class Settings(BaseSettings):
     finchnode_mode: Literal["mock", "demo", "sandbox", "production"] = "mock"
     finchnode_api_key: str = ""
     finchnode_base_url: str = ""
+    # Signing secret (whsec_...) of the FinchNode application's webhook (console ->
+    # Applications -> Webhook signatures). Needed for POST /finchnode/webhook.
+    finchnode_webhook_secret: str = ""
+    # What a Connect session asks the patient to share (must be on the FinchNode app's list).
+    finchnode_connect_categories: str = "demographics,encounters,labs,medications,claims,documents"
+    # one-time | continuous ("" = the FinchNode application's own setting). Continuous
+    # shares send records.updated when the hospital adds new records.
+    finchnode_sync_mode: Literal["", "one-time", "continuous"] = ""
+    # Where FinchNode's "Return to Amyna" button sends the patient (optional).
+    finchnode_connect_return_url: str = ""
     extraction_mode: Literal["rules", "ollama"] = "rules"
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "qwen3:1.7b"
@@ -144,6 +162,20 @@ class Settings(BaseSettings):
 
     def allowed_numbers(self) -> frozenset[str]:
         return frozenset(n.strip() for n in self.telephony_allowed_numbers.split(",") if n.strip())
+
+    def connect_categories(self) -> list[str]:
+        return [c.strip() for c in self.finchnode_connect_categories.split(",") if c.strip()]
+
+    def payer_phone_for(self, payer_name: str | None) -> str | None:
+        """PAYER_PHONES lookup by payer name (case-insensitive), or None."""
+        if not payer_name:
+            return None
+        wanted = payer_name.strip().lower()
+        for entry in self.payer_phones.replace("\n", ";").split(";"):
+            name, _, phone = entry.rpartition("=")
+            if name.strip().lower() == wanted and phone.strip():
+                return phone.strip()
+        return None
 
     def telnyx_fallback_profiles(self) -> tuple[tuple[str, str, str], ...]:
         """Complete (API key, connection id, caller number) fallback triplets."""
@@ -189,10 +221,11 @@ class Settings(BaseSettings):
             missing.extend(f"{flag} requires {name}" for name, value in pairs if not value)
 
         if self.finchnode_mode in ("sandbox", "production"):
-            pairs = [("FINCHNODE_API_KEY", self.finchnode_api_key)]
-            if self.finchnode_mode == "sandbox":
-                pairs.append(("FINCHNODE_BASE_URL", self.finchnode_base_url))
-            need(f"FINCHNODE_MODE={self.finchnode_mode}", *pairs)
+            # FINCHNODE_BASE_URL is optional: both use https://api.finchnode.com/api/v1.
+            need(
+                f"FINCHNODE_MODE={self.finchnode_mode}",
+                ("FINCHNODE_API_KEY", self.finchnode_api_key),
+            )
         if self.notify_mode == "relay_service":
             need("NOTIFY_MODE=relay_service", ("RELAY_SERVICE_URL", self.relay_service_url))
         if self.xai_voice_mode == "live":
@@ -277,6 +310,9 @@ class Settings(BaseSettings):
         expected_finchnode = "sandbox" if self.app_env == "staging" else "production"
         if self.finchnode_mode != expected_finchnode:
             mistakes.append(f"APP_ENV={self.app_env} requires FINCHNODE_MODE={expected_finchnode}")
+        # FinchNode tells Core when a patient connects or revokes sharing by webhook.
+        if not self.finchnode_webhook_secret:
+            mistakes.append(f"APP_ENV={self.app_env} requires FINCHNODE_WEBHOOK_SECRET")
         if self.app_env in ("staging", "prod"):
             # Service tokens are real secrets outside dev/test (no dev fallbacks).
             for name, value in (

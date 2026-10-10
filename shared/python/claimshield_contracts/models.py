@@ -115,6 +115,10 @@ class Case(ContractModel):
     channel: Channel
     patient: PatientRef
     external_ref: str | None = None
+    #: Masked patient callback number for the human merge (None = not given yet).
+    callback_phone_masked: str | None = None
+    #: False while the patient is still linking records through FinchNode Connect.
+    records_linked: bool = True
     created_at: datetime
     updated_at: datetime
 

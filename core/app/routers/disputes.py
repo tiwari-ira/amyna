@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from claimshield_contracts.api import (
     DisputeApproval,
@@ -14,6 +14,7 @@ from ..auth import ServiceIdentity, require_scopes
 from ..container import Container
 from ..deps import get_container
 from ..services import dispute_service, workflows
+from ._ownership import guard_case
 
 router = APIRouter(prefix="/disputes", tags=["disputes"])
 
@@ -22,10 +23,13 @@ router = APIRouter(prefix="/disputes", tags=["disputes"])
 def prepare_dispute(
     body: DisputeCreate,
     response: Response,
-    _: ServiceIdentity = Depends(require_scopes("disputes:write")),
+    request: Request,
+    identity: ServiceIdentity = Depends(require_scopes("disputes:write")),
     container: Container = Depends(get_container),
 ) -> DisputePreparation:
     """Ask the Dispute Agent logic to draft the package. 202 while agents work."""
+    with container.session_scope() as db:
+        guard_case(db, request, identity, case_id=body.case_id)
     result = workflows.prepare_dispute(container, case_id=body.case_id)
     if result.status == WorkStatus.PENDING:
         response.status_code = status.HTTP_202_ACCEPTED
@@ -35,10 +39,12 @@ def prepare_dispute(
 @router.get("/{dispute_id}", response_model=Dispute)
 def get_dispute(
     dispute_id: str,
-    _: ServiceIdentity = Depends(require_scopes("disputes:read")),
+    request: Request,
+    identity: ServiceIdentity = Depends(require_scopes("disputes:read")),
     container: Container = Depends(get_container),
 ) -> Dispute:
     with container.session_scope() as db:
+        guard_case(db, request, identity, dispute=dispute_id)
         return mappers.dispute_to_model(dispute_service.get_dispute_row(db, dispute_id))
 
 
@@ -46,11 +52,13 @@ def get_dispute(
 def approve_dispute(
     dispute_id: str,
     body: DisputeApproval,
+    request: Request,
     identity: ServiceIdentity = Depends(require_scopes("disputes:decide")),
     container: Container = Depends(get_container),
 ) -> Dispute:
     """Explicit patient approval. Stores the authorization that gates any insurer call."""
     with container.session_scope() as db:
+        guard_case(db, request, identity, dispute=dispute_id)
         row = dispute_service.approve(
             db,
             container,
@@ -69,10 +77,12 @@ def approve_dispute(
 def reject_dispute(
     dispute_id: str,
     body: DisputeRejection,
+    request: Request,
     identity: ServiceIdentity = Depends(require_scopes("disputes:decide")),
     container: Container = Depends(get_container),
 ) -> Dispute:
     with container.session_scope() as db:
+        guard_case(db, request, identity, dispute=dispute_id)
         row = dispute_service.reject(
             db,
             container,

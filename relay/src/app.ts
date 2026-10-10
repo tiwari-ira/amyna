@@ -1,11 +1,23 @@
-/** Builds the handler context and the HTTP server (index.ts just listens). */
+/** Builds the handler context and the HTTP server (index.ts just listens).
+ *
+ * Both inbound routes acknowledge first and work afterwards:
+ *  - POST /webhook/relay: Relay allows 10 s per delivery and recommends "store the event,
+ *    answer 2xx, then process" (docs.relayapp.im/webhooks). The event is claimed in the
+ *    durable ledger (duplicates are ignored), answered 200, then handled in the
+ *    background in per-patient order. A failure is logged and the patient is asked to
+ *    send it again, since the platform will not retry an acknowledged event.
+ *  - POST /internal/notify: Core's push. Answered 202 at once (Core must never wait on a
+ *    patient's queue -- it may be the very request holding it), delivered in order, and a
+ *    failed send is reported back to Core as a signed delivery_status event.
+ */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import { timingSafeEqual } from "node:crypto";
 
 import type { RelayConfig } from "./config";
 import { CoreClient } from "./coreClient";
-import type { HandlerContext } from "./handlers/context";
+import { newEventId } from "./handlers/approvalFlow";
+import { type HandlerContext, say } from "./handlers/context";
 import { handleIncoming } from "./handlers/incomingMessage";
 import { onCoreNotify, type CoreNotifyPayload } from "./handlers/humanHandoff";
 import { LiveTranscriber, MockTranscriber } from "./handlers/transcription";
@@ -13,8 +25,10 @@ import { findNearbyHospital } from "./places/hospitals";
 import { LiveRelayAdapter } from "./relayAdapter/live";
 import { MockRelayAdapter } from "./relayAdapter/mock";
 import { ConversationStore } from "./store";
+import { copy } from "./ux/messages";
 import {
   EventLedger,
+  type InboundEvent,
   SignatureError,
   parsePlatformEvent,
   verifyPlatformSignature,
@@ -35,6 +49,11 @@ export function createContext(config: RelayConfig, overrides: Partial<HandlerCon
   };
 }
 
+/** The HTTP server plus a way to wait for acknowledged work (tests, graceful shutdown). */
+export interface AmynaServer extends Server {
+  idle(): Promise<void>;
+}
+
 async function readBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) chunks.push(chunk as Buffer);
@@ -52,8 +71,50 @@ function bearerMatches(header: string | undefined, token: string): boolean {
   return provided.length === expected.length && timingSafeEqual(provided, expected);
 }
 
-export function createApp(ctx: HandlerContext, ledger = new EventLedger(join(ctx.config.dataDir, "events.json"))): Server {
-  return createServer(async (req, res) => {
+/** Handle an acknowledged event. Never throws: the platform already has its 200. */
+async function processEvent(ctx: HandlerContext, event: InboundEvent, ledger: EventLedger): Promise<void> {
+  try {
+    await handleIncoming(ctx, event);
+  } catch (error) {
+    ledger.release(event.id); // a replayed copy may be handled again
+    ctx.log(`could not handle ${event.kind} event: ${(error as Error).message}`);
+    await say(ctx, ctx.store.get(event.from), copy.tryAgain).catch((sendError: Error) =>
+      ctx.log(`could not tell the patient: ${sendError.message}`),
+    );
+  }
+}
+
+/** Deliver a pushed notification; tell Core when the platform send failed. */
+async function deliverPush(ctx: HandlerContext, payload: CoreNotifyPayload): Promise<void> {
+  const { notification } = payload;
+  try {
+    await onCoreNotify(ctx, payload);
+  } catch (error) {
+    ctx.log(`push delivery failed: ${(error as Error).message}`);
+    await ctx.core
+      .sendSignedEvent({
+        event_id: newEventId(),
+        event_type: "delivery_status",
+        case_id: notification.case_id,
+        notification_id: notification.notification_id,
+        choice: "failed",
+        occurred_at: new Date().toISOString(),
+      })
+      .catch((reportError: Error) => ctx.log(`could not report the failure: ${reportError.message}`));
+  }
+}
+
+export function createApp(
+  ctx: HandlerContext,
+  ledger = new EventLedger(join(ctx.config.dataDir, "events.json")),
+): AmynaServer {
+  const pending = new Set<Promise<void>>();
+  const track = (work: Promise<void>) => {
+    pending.add(work);
+    void work.finally(() => pending.delete(work));
+  };
+
+  const server = createServer(async (req, res) => {
     try {
       if (req.method === "GET" && req.url === "/health") {
         return send(res, 200, { status: "ok", mode: ctx.config.mode });
@@ -76,20 +137,31 @@ export function createApp(ctx: HandlerContext, ledger = new EventLedger(join(ctx
           if (buttonId) event = { ...event, buttonId };
         }
         if (!ledger.claim(event.id)) return send(res, 200, { status: "duplicate" });
-        try {
-          await handleIncoming(ctx, event);
-        } catch (error) {
-          ledger.release(event.id); // let the platform retry
-          throw error;
-        }
-        return send(res, 200, { status: "processed" });
+        send(res, 200, { status: "accepted" });
+        track(processEvent(ctx, event, ledger));
+        return;
       }
       if (req.method === "POST" && req.url === "/internal/notify") {
         if (!bearerMatches(req.headers.authorization, ctx.config.serviceToken)) {
           return send(res, 401, { error: "unauthorized" });
         }
-        const payload = JSON.parse(await readBody(req)) as CoreNotifyPayload;
-        return send(res, 200, await onCoreNotify(ctx, payload));
+        let payload: CoreNotifyPayload;
+        try {
+          payload = JSON.parse(await readBody(req)) as CoreNotifyPayload;
+        } catch {
+          return send(res, 400, { error: "malformed notification" });
+        }
+        if (!payload?.notification?.notification_id || !payload.notification.case_id) {
+          return send(res, 400, { error: "malformed notification" });
+        }
+        if (!ctx.store.byCase(payload.notification.case_id)) {
+          // Not one of ours (yet): it stays in Core's outbox for the next pull.
+          ctx.log(`no Relay conversation for case ${payload.notification.case_id}; left in the outbox`);
+          return send(res, 200, { delivered: false });
+        }
+        send(res, 202, { delivered: true, delivery_ref: "relay:queued" });
+        track(deliverPush(ctx, payload));
+        return;
       }
       return send(res, 404, { error: "not found" });
     } catch (error) {
@@ -97,5 +169,10 @@ export function createApp(ctx: HandlerContext, ledger = new EventLedger(join(ctx
       ctx.log(`error: ${(error as Error).message}`);
       return send(res, 500, { error: "internal error" });
     }
-  });
+  }) as AmynaServer;
+
+  server.idle = async () => {
+    while (pending.size) await Promise.allSettled([...pending]);
+  };
+  return server;
 }

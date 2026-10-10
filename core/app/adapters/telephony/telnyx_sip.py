@@ -181,10 +181,15 @@ class TelnyxSipTelephony(TelephonyAdapter):
         )
 
     def dial_human(
-        self, call_id: str, to_number: str, insurer_ref: str | None = None
+        self,
+        call_id: str,
+        to_number: str,
+        insurer_ref: str | None = None,
+        *,
+        extra_allowed: frozenset[str] = frozenset(),
     ) -> DialResult:
         """Dial the human in parallel (second leg); the webhook bridges on answer."""
-        ensure_allowed(to_number, self._allowed)
+        ensure_allowed(to_number, self._allowed, extra_allowed)
         return self._rotate(
             "dial the human",
             lambda p: self._dial_with(p, human_client_state(call_id), to_number),

@@ -481,8 +481,36 @@
         "title": "CallTurn",
         "type": "object"
       },
+      "CallbackPhoneIn": {
+        "additionalProperties": false,
+        "description": "The patient's own number, confirmed by the patient, for joining an insurer call.",
+        "properties": {
+          "phone": {
+            "maxLength": 32,
+            "minLength": 7,
+            "title": "Phone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "phone"
+        ],
+        "title": "CallbackPhoneIn",
+        "type": "object"
+      },
       "Case": {
         "properties": {
+          "callback_phone_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Callback Phone Masked"
+          },
           "case_id": {
             "title": "Case Id",
             "type": "string"
@@ -508,6 +536,11 @@
           },
           "patient": {
             "$ref": "#/components/schemas/PatientRef"
+          },
+          "records_linked": {
+            "default": true,
+            "title": "Records Linked",
+            "type": "boolean"
           },
           "state": {
             "$ref": "#/components/schemas/CaseState"
@@ -566,6 +599,17 @@
             },
             "title": "Agent Runs",
             "type": "array"
+          },
+          "callback_phone_masked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Callback Phone Masked"
           },
           "calls": {
             "items": {
@@ -654,6 +698,11 @@
           },
           "patient": {
             "$ref": "#/components/schemas/PatientRef"
+          },
+          "records_linked": {
+            "default": true,
+            "title": "Records Linked",
+            "type": "boolean"
           },
           "state": {
             "$ref": "#/components/schemas/CaseState"
@@ -2027,6 +2076,165 @@
         "title": "EvidenceSource",
         "type": "string"
       },
+      "FinchNodeClaimSummary": {
+        "description": "One bill on the patient's FinchNode records (to let the patient pick it).",
+        "properties": {
+          "date_of_service": {
+            "format": "date",
+            "title": "Date Of Service",
+            "type": "string"
+          },
+          "external_claim_id": {
+            "title": "External Claim Id",
+            "type": "string"
+          },
+          "itemized": {
+            "title": "Itemized",
+            "type": "boolean"
+          },
+          "payer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payer Name"
+          },
+          "provider_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Name"
+          },
+          "total_billed_cents": {
+            "title": "Total Billed Cents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "external_claim_id",
+          "date_of_service",
+          "total_billed_cents",
+          "itemized"
+        ],
+        "title": "FinchNodeClaimSummary",
+        "type": "object"
+      },
+      "FinchNodeClaims": {
+        "properties": {
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/FinchNodeClaimSummary"
+            },
+            "title": "Claims",
+            "type": "array"
+          },
+          "complete": {
+            "default": true,
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "gap": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap"
+          }
+        },
+        "required": [
+          "claims"
+        ],
+        "title": "FinchNodeClaims",
+        "type": "object"
+      },
+      "FinchNodeConnectCreate": {
+        "additionalProperties": false,
+        "description": "Start (or restart) linking a patient's health records through FinchNode Connect.\n\nWithout ``case_id`` Core opens a new case for the signed-in patient; it gets its\nFinchNode identity when the patient finishes Connect.",
+        "properties": {
+          "case_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Case Id"
+          },
+          "return_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return Url"
+          }
+        },
+        "title": "FinchNodeConnectCreate",
+        "type": "object"
+      },
+      "FinchNodeConnectSession": {
+        "properties": {
+          "case_id": {
+            "title": "Case Id",
+            "type": "string"
+          },
+          "connected": {
+            "default": false,
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "case_id",
+          "url",
+          "status"
+        ],
+        "title": "FinchNodeConnectSession",
+        "type": "object"
+      },
       "FindOrCreateCaseRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3322,6 +3530,22 @@
       },
       "PatientRecords": {
         "properties": {
+          "complete": {
+            "default": true,
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "gap": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gap"
+          },
           "records": {
             "items": {
               "$ref": "#/components/schemas/HealthRecord"
@@ -4874,7 +5098,7 @@
     },
     "/auth/session": {
       "post": {
-        "description": "Issue an opaque session token (demo environments; disabled in prod).",
+        "description": "Issue an opaque patient session token (Relay handles: any environment).",
         "operationId": "start_session_auth_session_post",
         "requestBody": {
           "content": {
@@ -4908,6 +5132,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Start Session",
         "tags": [
           "auth"
@@ -5007,6 +5236,64 @@
         ]
       }
     },
+    "/cases/{case_id}/callback-phone": {
+      "put": {
+        "description": "The patient's own number for joining an insurer call when it pauses for them\n(replaces the single HUMAN_HANDOFF_PHONE for this case).",
+        "operationId": "set_callback_phone_cases__case_id__callback_phone_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CallbackPhoneIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Case"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Callback Phone",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
     "/cases/{case_id}/consents": {
       "post": {
         "description": "Record a patient consent (health data access or visit recording).",
@@ -5060,6 +5347,54 @@
           }
         ],
         "summary": "Record Consent",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/cases/{case_id}/finchnode/claims": {
+      "get": {
+        "description": "The patient's bills on FinchNode, newest first (needs health-data consent).\n\nFinchNode bills are summaries: ``itemized=false`` means the patient must send the\nitemized statement before Amyna can check it.",
+        "operationId": "get_finchnode_claims_cases__case_id__finchnode_claims_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinchNodeClaims"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Finchnode Claims",
         "tags": [
           "cases"
         ]
@@ -5517,6 +5852,116 @@
         "summary": "Reject Dispute",
         "tags": [
           "disputes"
+        ]
+      }
+    },
+    "/finchnode/connect-sessions": {
+      "post": {
+        "description": "Start linking the signed-in patient's health records (FinchNode hosted Connect).\n\nSend the patient to ``url``. Linking finishes when FinchNode sends\n``consent.granted`` (POST /finchnode/webhook) or when the session is read back.\n``409 connect_unavailable`` in mock/demo modes, where patients type their id.",
+        "operationId": "create_connect_session_finchnode_connect_sessions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinchNodeConnectCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinchNodeConnectSession"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Connect Session",
+        "tags": [
+          "finchnode"
+        ]
+      }
+    },
+    "/finchnode/connect-sessions/{session_id}": {
+      "get": {
+        "description": "Read a session back from FinchNode; finishes linking if the patient is done.",
+        "operationId": "get_connect_session_finchnode_connect_sessions__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinchNodeConnectSession"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Connect Session",
+        "tags": [
+          "finchnode"
+        ]
+      }
+    },
+    "/finchnode/webhook": {
+      "post": {
+        "description": "FinchNode lifecycle events (consent.granted, records.updated, consent.revoked...).\n\nSigned with the application's ``whsec_`` secret (FINCHNODE_WEBHOOK_SECRET).\nAnswers 204 for a new event and 200 for a duplicate, before doing the work.",
+        "operationId": "finchnode_webhook_finchnode_webhook_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Finchnode Webhook",
+        "tags": [
+          "finchnode"
         ]
       }
     },
@@ -7249,6 +7694,10 @@
     {
       "description": "Signed events from the Relay service",
       "name": "relay"
+    },
+    {
+      "description": "FinchNode hosted Connect sessions and signed FinchNode webhooks",
+      "name": "finchnode"
     },
     {
       "description": "Stateless natural-language understanding",

@@ -14,6 +14,7 @@ from ..auth import ServiceIdentity, require_scopes
 from ..container import Container
 from ..deps import get_container
 from ..services import telnyx_service
+from ._ownership import guard_case
 
 router = APIRouter(prefix="/voice", tags=["voice"])
 log = logging.getLogger("claimshield.voice")
@@ -92,19 +93,25 @@ async def xai_incoming_call_webhook(
 @router.post("/start", response_model=CallSession, status_code=status.HTTP_201_CREATED)
 def start_call(
     body: VoiceStartIn,
+    request: Request,
     identity: ServiceIdentity = Depends(require_scopes("voice:start")),
     container: Container = Depends(get_container),
 ) -> CallSession:
     """Start the insurer call. 409 unless the dispute is APPROVED with stored authorization."""
+    with container.session_scope() as db:
+        guard_case(db, request, identity, case_id=body.case_id)
     return container.voice_manager.start_call(body.case_id, actor=identity.actor)
 
 
 @router.get("/{call_id}", response_model=CallSession)
 def get_call(
     call_id: str,
-    _: ServiceIdentity = Depends(require_scopes("voice:read")),
+    request: Request,
+    identity: ServiceIdentity = Depends(require_scopes("voice:read")),
     container: Container = Depends(get_container),
 ) -> CallSession:
+    with container.session_scope() as db:
+        guard_case(db, request, identity, call=call_id)
     return container.voice_manager.get_call(call_id)
 
 
@@ -127,10 +134,13 @@ def call_event(
 def human_handoff(
     call_id: str,
     body: HandoffIn,
+    request: Request,
     identity: ServiceIdentity = Depends(require_scopes("voice:handoff")),
     container: Container = Depends(get_container),
 ) -> HumanIntervention:
     """Pause the call and bring in the patient (e.g. the patient wants to take over)."""
+    with container.session_scope() as db:
+        guard_case(db, request, identity, call=call_id)
     return container.voice_manager.request_handoff(
         call_id, reason=body.reason, detail=body.detail, actor=identity.actor
     )

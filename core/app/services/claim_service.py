@@ -5,7 +5,12 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from claimshield_contracts.api import ClaimAnalysisResult, ClaimUpload
+from claimshield_contracts.api import (
+    ClaimAnalysisResult,
+    ClaimUpload,
+    FinchNodeClaims,
+    FinchNodeClaimSummary,
+)
 from claimshield_contracts.enums import (
     CaseState,
     ClaimSource,
@@ -77,6 +82,44 @@ def _claim_from_upload(upload: ClaimUpload) -> Claim:
     )
 
 
+def find_finchnode_claim(claims: list[Claim], wanted: str) -> Claim | None:
+    """Match a claim number as patients and platforms write it (case, ``fn:`` prefix)."""
+    key = wanted.strip().lower()
+    if not key:
+        return None
+    return next(
+        (
+            claim
+            for claim in claims
+            if key in (claim.external_claim_id.lower(), claim.claim_id.lower())
+        ),
+        None,
+    )
+
+
+def finchnode_claims(db: Session, container: "Container", case_id: str) -> FinchNodeClaims:
+    """The patient's FinchNode bills, summarized for picking one (consent-gated)."""
+    case = get_case_row(db, case_id)
+    require_consent(db, case_id, ConsentType.HEALTH_DATA_ACCESS)
+    claims = container.finchnode.get_patient_claims(case.finchnode_patient_id)
+    gap = container.finchnode.claims_gap(case.finchnode_patient_id)
+    return FinchNodeClaims(
+        claims=[
+            FinchNodeClaimSummary(
+                external_claim_id=claim.external_claim_id,
+                provider_name=claim.provider_name,
+                payer_name=claim.payer_name,
+                date_of_service=claim.date_of_service,
+                total_billed_cents=claim.total_billed_cents,
+                itemized=bool(claim.lines),
+            )
+            for claim in sorted(claims, key=lambda c: c.date_of_service, reverse=True)
+        ],
+        complete=gap is None,
+        gap=gap,
+    )
+
+
 def ingest_claim(
     db: Session,
     container: "Container",
@@ -94,9 +137,26 @@ def ingest_claim(
     if source == ClaimSource.FINCHNODE:
         require_consent(db, case_id, ConsentType.HEALTH_DATA_ACCESS)
         available = container.finchnode.get_patient_claims(case.finchnode_patient_id)
-        incoming = next((c for c in available if c.external_claim_id == finchnode_claim_id), None)
+        incoming = find_finchnode_claim(available, finchnode_claim_id or "")
         if incoming is None:
-            raise NotFound(f"FinchNode claim {finchnode_claim_id} not found for this patient")
+            gap = container.finchnode.claims_gap(case.finchnode_patient_id)
+            raise NotFound(
+                f"FinchNode claim {finchnode_claim_id} not found for this patient",
+                code="claim_not_found",
+                claims_complete=gap is None,
+            )
+        if not incoming.lines:
+            # FinchNode claim records are summaries (no line items): the itemized bill
+            # has to come from the patient before anything can be checked.
+            raise InvalidInput(
+                "This claim on the patient's records has no itemized charges. "
+                "Upload the itemized bill instead.",
+                code="claim_not_itemized",
+                external_claim_id=incoming.external_claim_id,
+                provider_name=incoming.provider_name,
+                date_of_service=incoming.date_of_service.isoformat(),
+                total_billed_cents=incoming.total_billed_cents,
+            )
     elif upload is not None:
         incoming = _claim_from_upload(upload)
     else:
