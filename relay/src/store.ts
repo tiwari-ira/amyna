@@ -28,6 +28,8 @@ export interface Conversation {
   recordingConsentId?: string;
   visitId?: string;
   recordingRef?: string;
+  /** Words heard in the visit memo, shown back to the patient with the notes. */
+  heardText?: string;
   claimId?: string;
   reportSent?: boolean;
   chatId?: string;

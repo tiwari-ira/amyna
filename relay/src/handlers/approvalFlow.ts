@@ -6,6 +6,7 @@
  */
 import { randomUUID } from "node:crypto";
 
+import { CoreError } from "../coreClient";
 import type { Conversation } from "../store";
 import { copy } from "../ux/messages";
 import { type HandlerContext, requireCase, say } from "./context";
@@ -32,11 +33,25 @@ export async function captureClaimId(
     return;
   }
   if (!convo.claimId) {
-    const claim = await ctx.core.ingestClaim({
-      case_id: requireCase(convo),
-      source: "finchnode",
-      finchnode_claim_id: match[0].toUpperCase(),
-    });
+    let claim;
+    try {
+      claim = await ctx.core.ingestClaim({
+        case_id: requireCase(convo),
+        source: "finchnode",
+        finchnode_claim_id: match[0].toUpperCase(),
+      });
+    } catch (error) {
+      if (error instanceof CoreError && error.status === 404) {
+        await say(
+          ctx,
+          convo,
+          "I can't find that claim on this patient's records. This chart doesn't have a bill yet, " +
+            'so there is nothing to review. Send "restart" to practice the visit again.',
+        );
+        return;
+      }
+      throw error;
+    }
     convo.claimId = claim.claim_id;
     ctx.store.save(); // a platform retry after a later failure must not re-ingest
   }
