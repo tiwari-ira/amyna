@@ -101,19 +101,54 @@ def detect_sensitive_request(text: str) -> SensitiveRequest | None:
     return None
 
 
-_SENSITIVE_VALUES: tuple[tuple[str, str], ...] = (
-    ("ssn", r"(?<![\w-])\d{3}[- ]?\d{2}[- ]?\d{4}(?![\w-])"),
-    ("pin", r"\bpin\b\D{0,12}\d{4,8}\b"),
-    ("password", r"\bpass ?word\b\s*(is|:|=)\s*\S+"),
-    ("card_number", r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)"),
-)
+_SSN_SHAPED = re.compile(r"(?<![\w-])\d{3}[- ]?\d{2}[- ]?\d{4}(?![\w-])")
+# In an insurer *reference number* only the dashed/spaced SSN shape counts: plain
+# 9-digit references are common and come from the insurer, not the patient.
+_SSN_FORMATTED = re.compile(r"(?<![\w-])\d{3}[- ]\d{2}[- ]\d{4}(?![\w-])")
+_PIN = re.compile(r"\bpin\b\D{0,12}\d{4,8}\b", _I)
+_PASSWORD = re.compile(r"\bpass ?word\b\s*(is|:|=)\s*\S+", _I)
+_CARD_SHAPED = re.compile(r"(?<!\d)(?:\d[ -]?){13,19}(?!\d)")
 
 
-def contains_sensitive_data(text: str | None) -> list[str]:
-    """Categories of secret *values* present in ``text`` (not just mentions)."""
+def _luhn_valid(digits: str) -> bool:
+    """Every real payment card number passes the Luhn checksum; most other long
+    numbers (claim ids, reference numbers) don't."""
+    total = 0
+    for index, char in enumerate(reversed(digits)):
+        value = int(char)
+        if index % 2:
+            value = value * 2 - 9 if value > 4 else value * 2
+        total += value
+    return total % 10 == 0
+
+
+def contains_sensitive_data(text: str | None, *, reference: bool = False) -> list[str]:
+    """Categories of secret *values* present in ``text`` (not just mentions).
+
+    ``reference=True`` is for an insurer reference number: bare 9-digit values are
+    allowed there (formatted SSNs still are not)."""
     if not text:
         return []
-    return [name for name, pattern in _SENSITIVE_VALUES if re.search(pattern, text, _I)]
+    found = []
+    if (_SSN_FORMATTED if reference else _SSN_SHAPED).search(text):
+        found.append("ssn")
+    if _PIN.search(text):
+        found.append("pin")
+    if _PASSWORD.search(text):
+        found.append("password")
+    if any(_luhn_valid(re.sub(r"\D", "", m.group(0))) for m in _CARD_SHAPED.finditer(text)):
+        found.append("card_number")
+    return found
+
+
+def reject_sensitive_reference(text: str | None) -> None:
+    """Like reject_sensitive_notes, for an insurer-issued reference number."""
+    found = contains_sensitive_data(text, reference=True)
+    if found:
+        raise SensitiveDataRejected(
+            "That reference number looks like a sensitive identifier; it was not stored.",
+            categories=found,
+        )
 
 
 def reject_sensitive_notes(text: str | None) -> None:

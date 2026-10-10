@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 
 from claimshield_contracts.api import (
     HumanInterventionCreate,
@@ -13,6 +13,7 @@ from ..container import Container
 from ..deps import get_container
 from ..models_db import DecisionRow
 from ..services import human_service, workflows
+from ._ownership import guard_case
 
 router = APIRouter(prefix="/human-intervention", tags=["human"])
 
@@ -39,10 +40,12 @@ def create_intervention(
 @router.get("/{intervention_id}", response_model=HumanIntervention)
 def get_intervention(
     intervention_id: str,
-    _: ServiceIdentity = Depends(require_scopes("human:read")),
+    request: Request,
+    identity: ServiceIdentity = Depends(require_scopes("human:read")),
     container: Container = Depends(get_container),
 ) -> HumanIntervention:
     with container.session_scope() as db:
+        guard_case(db, request, identity, intervention=intervention_id)
         row = human_service.get_intervention_row(db, intervention_id)
         decision = db.get(DecisionRow, row.decision_id) if row.decision_id else None
         return mappers.intervention_to_model(row, decision)
@@ -52,6 +55,7 @@ def get_intervention(
 def resolve_intervention(
     intervention_id: str,
     body: HumanInterventionResolve,
+    request: Request,
     identity: ServiceIdentity = Depends(require_scopes("human:write")),
     container: Container = Depends(get_container),
 ) -> HumanResolutionResult:
@@ -59,6 +63,8 @@ def resolve_intervention(
 
     Notes are rejected (422) if they contain SSNs, PINs, passwords or card numbers.
     """
+    with container.session_scope() as db:
+        guard_case(db, request, identity, intervention=intervention_id)
     return workflows.resolve_intervention(
         container,
         intervention_id=intervention_id,

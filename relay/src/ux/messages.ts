@@ -4,7 +4,7 @@
  * Button ids on Core notifications are `ntf:<notificationId>:<CHOICE>`; the
  * reply is forwarded to Core as a signed event (handlers/approvalFlow.ts).
  */
-import type { PatientNotification } from "../coreClient";
+import type { FinchNodeClaimSummary, PatientNotification } from "../coreClient";
 import type { Button, OutboundMessage } from "../relayAdapter/types";
 
 export const BUTTONS = {
@@ -21,7 +21,46 @@ export const BUTTONS = {
   reject: { id: "REJECT", label: "Reject" },
   done: { id: "DONE", label: "Done" },
   cancel: { id: "CANCEL", label: "Cancel call" },
+  connectDone: { id: "CONNECT_DONE", label: "I'm done connecting" },
+  skipPhone: { id: "SKIP_PHONE", label: "Don't call me" },
 } as const satisfies Record<string, Button>;
+
+/** Plain-language versions of Core error codes the patient can act on. */
+const CORE_PROBLEMS: Record<string, string> = {
+  finchnode_consent_inactive:
+    'Your health-record sharing has ended, so I can\'t read your records. Send "restart" to connect them again.',
+  finchnode_unavailable:
+    "I couldn't reach your health records just now. Please try again in a minute.",
+  finchnode_records_unavailable:
+    "Some of your health records couldn't be loaded just now, so I didn't check the bill yet. Please try again in a minute.",
+  finchnode_not_authorized:
+    "Amyna's connection to health records isn't set up correctly. The Amyna team has to fix it before I can check bills.",
+  payer_phone_missing:
+    "I don't have your insurance company's phone number yet, so I can't call them. The Amyna team needs to add it.",
+  number_not_allowed:
+    "I'm not allowed to call that insurance number yet (it isn't on Amyna's approved list).",
+  patient_session_required: "Sign-in isn't set up for this Amyna service yet.",
+  dev_sessions_disabled: "Sign-in isn't set up for this Amyna service yet.",
+  case_forbidden: "That case belongs to someone else, so I can't open it.",
+};
+
+const money = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+
+/** "Jul 18" from "2026-07-18". */
+function shortDate(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(Date.UTC(year!, month! - 1, day!)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+export function billLabel(bill: FinchNodeClaimSummary): string {
+  const provider = (bill.provider_name ?? "Bill").replace(/\s*\(Synthetic\)/i, "");
+  const label = `${shortDate(bill.date_of_service)} · ${money(bill.total_billed_cents)} · ${provider}`;
+  return label.length > 80 ? `${label.slice(0, 79)}…` : label; // Relay labels: 1-80 chars
+}
 
 export const QUESTION_BUTTONS: Button[] = [BUTTONS.yes, BUTTONS.no, BUTTONS.notSure];
 export const APPROVAL_BUTTONS: Button[] = [BUTTONS.review, BUTTONS.approve, BUTTONS.reject];
@@ -49,7 +88,46 @@ export const copy = {
   welcome:
     "Hi! I'm Amyna. I check medical bills against your health records and help fix " +
     "billing mistakes.\n\nTell me what's going on in your own words -- for example " +
-    "\"this bill looks wrong\" -- or send me a photo of the bill.",
+    "\"this bill looks wrong\".",
+  connectRecords: (url: string): OutboundMessage => ({
+    text:
+      "First, connect your health records so I can check bills against what really happened. " +
+      "Tap the link, pick your hospital or clinic, sign in there and approve sharing with Amyna. " +
+      "Open it in your phone's browser: FinchNode emails you a link that must open in the same browser.",
+    buttons: [{ id: "CONNECT_LINK", label: "Connect my health records", url }, BUTTONS.connectDone],
+  }),
+  connectStillWaiting: (url: string): OutboundMessage => ({
+    text: "I don't see your records yet. Finish connecting with the link, then tap I'm done connecting.",
+    buttons: [{ id: "CONNECT_LINK", label: "Connect my health records", url }, BUTTONS.connectDone],
+  }),
+  hospitalNeedsLink:
+    "Looks like you're at a hospital. Connect your health records first, then I'll start the recording.",
+  askClaimNumber: "Which bill? Send the claim number printed on it (for example CLM-2026-0915-001).",
+  pickBill: (bills: FinchNodeClaimSummary[]): OutboundMessage => ({
+    text: "Which bill should I check? These are the bills on your health records. You can also send a claim number.",
+    buttons: bills.map((bill) => ({ id: `bill:${bill.external_claim_id}`, label: billLabel(bill) })),
+  }),
+  billNotItemized: (detail: Record<string, unknown>): OutboundMessage => ({
+    text:
+      `Your records show ${typeof detail.provider_name === "string" ? `a bill from ${detail.provider_name}` : "that bill"}` +
+      (typeof detail.date_of_service === "string" ? ` for ${shortDate(detail.date_of_service)}` : "") +
+      (typeof detail.total_billed_cents === "number" ? ` (${money(detail.total_billed_cents)})` : "") +
+      ", but only as a total: it doesn't list the individual charges, so I can't check it yet. " +
+      "Ask the hospital for the itemized bill. Once it's added to your case, tap Review my bill.",
+    buttons: [BUTTONS.reviewBill],
+  }),
+  billPhotoUnsupported:
+    "Thanks! I can't read bill photos or PDFs yet. Tap Review my bill to pick the bill from your health " +
+    "records, or send the claim number printed on it.",
+  askCallbackPhone: (): OutboundMessage => ({
+    text:
+      "Before I call your insurer: if they ask for something only you can give (like your SSN), " +
+      "I'll pause and call you so you can join the same call. What number should I call?",
+    buttons: [BUTTONS.skipPhone],
+  }),
+  callbackPhoneSaved: (masked: string) => `Thanks. If the insurer needs you, I'll call ${masked}.`,
+  callbackPhoneInvalid: 'That doesn\'t look like a phone number. Send it like 555-123-4567, or tap "Don\'t call me".',
+  tryAgain: "Sorry, something went wrong on my side. Please send that again in a minute.",
   // Shown only when the flow truly needs the patient ID (demo/sandbox identity).
   // Explained in plain English; the patient never has to know terms in advance.
   idGuidance:
@@ -117,7 +195,10 @@ export const copy = {
   restart: "Send \"restart\" to review another bill.",
   notUnderstood: "Sorry, I didn't catch that. Please use the buttons above.",
   coreRejected: (code: string) =>
+    CORE_PROBLEMS[code] ??
     `Sorry, I couldn't do that step (${code}). Send "restart" to start over if you're stuck.`,
+  /** A friendly message for a Core error code, or undefined when there is none. */
+  coreProblem: (code: string): string | undefined => CORE_PROBLEMS[code],
 };
 
 function withNotificationIds(notificationId: string, buttons: Button[]): Button[] {

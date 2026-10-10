@@ -9,7 +9,14 @@ import {
   checkVisitEvidence,
   onRecordingCompleted,
 } from "./appointmentRecording";
-import { answerOpenPrompt, captureClaimId, replyToNotification, reviewBill } from "./approvalFlow";
+import {
+  answerOpenPrompt,
+  captureCallbackPhone,
+  captureClaimId,
+  replyToNotification,
+  reviewBill,
+} from "./approvalFlow";
+import { checkConnect, startConnect } from "./connect";
 import { answerDataConsent, askDataConsent } from "./consent";
 import { type HandlerContext, patientScope, say, serialize } from "./context";
 import {
@@ -20,7 +27,8 @@ import {
   startRecordingFromHospital,
 } from "./hospitalCheckin";
 
-const PATIENT_ID = /fn_pat_[A-Za-z0-9_]+|u_[0-9a-fA-F]+/;
+/** Typed ids (mock/demo only): fixtures, FinchNode subjects, FinchNode demo patients. */
+const PATIENT_ID = /fn_pat_[A-Za-z0-9_]+|u_[0-9a-fA-F]{16}|patient-demo-[a-z0-9-]+/;
 const TEXT_CHOICES: Record<string, string> = {
   yes: "YES",
   y: "YES",
@@ -42,6 +50,8 @@ export function normalizeText(text: string | undefined): string | undefined {
 
 async function start(ctx: HandlerContext, convo: Conversation): Promise<void> {
   await say(ctx, convo, copy.welcome);
+  // Production links records through FinchNode Connect; mock/demo fall back to a typed id.
+  if (await startConnect(ctx, convo)) return;
   convo.stage = "awaiting_patient_id";
 }
 
@@ -75,20 +85,22 @@ async function capturePatientId(
   await askDataConsent(ctx, convo);
 }
 
-/** One patient event; serialized per patient. Core 4xx errors become a patient message
- * (retrying would fail the same way); 5xx/network errors propagate so the platform retries. */
+/** One patient event; serialized per patient. Core errors the patient can act on (and every
+ * 4xx) become a patient message; other 5xx/network errors propagate to the caller. */
 export function handleIncoming(ctx: HandlerContext, event: InboundEvent): Promise<void> {
   return serialize(event.from, async () => {
-    // Attach this patient's identity first: cases belong to the signed-in user.
-    const scoped = { ...ctx, core: await patientScope(ctx, event.from) };
     try {
+      // Attach this patient's identity first: cases belong to the signed-in user.
+      const scoped = { ...ctx, core: await patientScope(ctx, event.from) };
       await route(scoped, event);
     } catch (error) {
-      if (!(error instanceof CoreError) || error.status >= 500) throw error;
+      if (!(error instanceof CoreError)) throw error;
+      const friendly = copy.coreProblem(error.code);
+      if (!friendly && error.status >= 500) throw error;
       ctx.log(`core rejected ${event.kind} (${error.status} ${error.code})`);
-      await say(scoped, scoped.store.get(event.from), copy.coreRejected(error.code));
+      await say(ctx, ctx.store.get(event.from), friendly ?? copy.coreRejected(error.code));
     } finally {
-      scoped.store.save();
+      ctx.store.save();
     }
   });
 }
@@ -111,6 +123,9 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
     ctx.log(`voice memo received (${event.audio.mimeType}, ${event.audio.sizeBytes ?? "?"} bytes)`);
     return await onRecordingCompleted(ctx, convo, event.audio.url, event.audio.mimeType);
   }
+  if (event.attachment && !event.text?.trim()) {
+    return await say(ctx, convo, copy.billPhotoUnsupported);
+  }
   const choice = event.buttonId ?? normalizeText(event.text);
   if (choice?.startsWith("ntf:")) {
     await replyToNotification(ctx, convo, choice, event.id);
@@ -121,6 +136,8 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
       return await start(ctx, convo);
     case "awaiting_patient_id":
       return await capturePatientId(ctx, convo, event.text);
+    case "awaiting_finchnode_connect":
+      return await checkConnect(ctx, convo);
     case "awaiting_data_consent":
       return await answerDataConsent(ctx, convo, choice);
     case "awaiting_recording_choice":
@@ -144,7 +161,9 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
       }
       return await say(ctx, convo, copy.readyForBill());
     case "awaiting_claim_id":
-      return await captureClaimId(ctx, convo, event.text);
+      return await captureClaimId(ctx, convo, event.text, choice);
+    case "awaiting_callback_phone":
+      return await captureCallbackPhone(ctx, convo, event.text, choice);
     case "in_review":
       return await answerOpenPrompt(ctx, convo, choice, event.id);
     case "done":

@@ -6,29 +6,51 @@
  */
 import { randomUUID } from "node:crypto";
 
-import { CoreError } from "../coreClient";
+import { CoreError, type FinchNodeClaimSummary } from "../coreClient";
 import type { Conversation } from "../store";
-import { copy } from "../ux/messages";
+import { BUTTONS, copy } from "../ux/messages";
 import { type HandlerContext, requireCase, say } from "./context";
 import { deliverPending } from "./humanHandoff";
 import { sendCaseReport } from "./patientReport";
 
-const CLAIM_NUMBER = /CLM-[A-Za-z0-9-]+/i;
+/** Claim numbers as patients see them: CLM-..., FinchNode claim ids, FinchNode record ids. */
+const CLAIM_NUMBER = /\b(?:CLM-[A-Za-z0-9-]+|claim-[A-Za-z0-9-]+|rec_[0-9a-f]{24})\b/i;
 const TERMINAL = new Set(["RESOLVED", "REJECTED", "FAILED"]);
 const MAX_ADVANCE_STEPS = 6;
+const MAX_BILL_BUTTONS = 4;
 
 export async function reviewBill(ctx: HandlerContext, convo: Conversation): Promise<void> {
-  await say(ctx, convo, "Which bill? Send the claim number printed on it (e.g. CLM-2026-0915-001).");
+  const caseId = requireCase(convo);
+  const detail = await ctx.core.getCase(caseId);
+  if (detail.claim) {
+    // The itemized bill is already on the case (e.g. added after a summary-only claim).
+    convo.claimId = detail.claim.claim_id;
+    await analyzeAndReview(ctx, convo);
+    return;
+  }
+  let bills: FinchNodeClaimSummary[] = [];
+  try {
+    bills = (await ctx.core.finchnodeClaims(caseId)).claims ?? [];
+  } catch (error) {
+    if (!(error instanceof CoreError) || error.status >= 500) throw error;
+    // e.g. consent not recorded yet: fall back to asking for the claim number
+  }
   convo.stage = "awaiting_claim_id";
+  if (bills.length) {
+    await say(ctx, convo, copy.pickBill(bills.slice(0, MAX_BILL_BUTTONS)));
+    return;
+  }
+  await say(ctx, convo, copy.askClaimNumber);
 }
 
 export async function captureClaimId(
   ctx: HandlerContext,
   convo: Conversation,
   text: string | undefined,
+  choice?: string,
 ): Promise<void> {
-  const match = text?.match(CLAIM_NUMBER);
-  if (!match) {
+  const picked = choice?.startsWith("bill:") ? choice.slice("bill:".length) : text?.match(CLAIM_NUMBER)?.[0];
+  if (!picked) {
     await say(ctx, convo, "I couldn't find a claim number. It looks like CLM-2026-0915-001.");
     return;
   }
@@ -38,28 +60,70 @@ export async function captureClaimId(
       claim = await ctx.core.ingestClaim({
         case_id: requireCase(convo),
         source: "finchnode",
-        finchnode_claim_id: match[0].toUpperCase(),
+        finchnode_claim_id: picked, // Core matches any capitalization
       });
     } catch (error) {
-      if (error instanceof CoreError && error.status === 404) {
+      if (!(error instanceof CoreError)) throw error;
+      if (error.status === 404) {
         await say(
           ctx,
           convo,
-          "I can't find that claim on this patient's records. This chart doesn't have a bill yet, " +
-            'so there is nothing to review. Send "restart" to practice the visit again.',
+          "I can't find that claim on your health records. Check the number on the bill, or " +
+            'send "restart" to start over.',
         );
         return;
       }
-      throw error;
+      if (error.code === "claim_not_itemized") {
+        convo.stage = "ready_for_bill";
+        await say(ctx, convo, copy.billNotItemized(error.detail));
+        return;
+      }
+      if (error.code !== "claim_exists") throw error;
+      // A bill was attached meanwhile: review that one.
+      claim = (await ctx.core.getCase(requireCase(convo))).claim;
+      if (!claim) throw error;
     }
     convo.claimId = claim.claim_id;
     ctx.store.save(); // a platform retry after a later failure must not re-ingest
   }
+  await analyzeAndReview(ctx, convo);
+}
+
+async function analyzeAndReview(ctx: HandlerContext, convo: Conversation): Promise<void> {
   await say(ctx, convo, copy.reviewing);
   // Idempotent in Core. With live agents it answers "pending" and Core notifies us later.
-  await ctx.core.analyzeClaim(convo.claimId);
+  await ctx.core.analyzeClaim(convo.claimId!);
   convo.stage = "in_review"; // only after Core accepted the work, so a retry re-runs this step
   await syncAndAdvance(ctx, convo);
+}
+
+/** Before the insurer call: the patient's own number for the human-merge leg (asked once). */
+export async function captureCallbackPhone(
+  ctx: HandlerContext,
+  convo: Conversation,
+  text: string | undefined,
+  choice: string | undefined,
+): Promise<void> {
+  const pending = convo.pendingApproval;
+  if (!pending) {
+    convo.stage = "in_review";
+    return;
+  }
+  if (choice !== BUTTONS.skipPhone.id && choice !== "NO") {
+    try {
+      const updated = await ctx.core.setCallbackPhone(requireCase(convo), text ?? "");
+      await say(ctx, convo, copy.callbackPhoneSaved(updated.callback_phone_masked ?? "your phone"));
+    } catch (error) {
+      if (error instanceof CoreError && error.code === "invalid_phone") {
+        await say(ctx, convo, copy.callbackPhoneInvalid);
+        return;
+      }
+      throw error;
+    }
+  }
+  convo.pendingApproval = undefined;
+  convo.stage = "in_review";
+  await replyToNotification(ctx, convo, `ntf:${pending.notificationId}:APPROVE`, pending.eventId);
 }
 
 /** A tap on a Core notification button (`ntf:<notificationId>:<CHOICE>`). */
@@ -79,6 +143,21 @@ export async function replyToNotification(
     const detail = await ctx.core.getCase(requireCase(convo));
     await say(ctx, convo, detail.dispute?.letter_text ?? "The dispute letter is not ready yet.");
     return;
+  }
+  if (
+    delivered.kind === "approval_request" &&
+    choice === "APPROVE" &&
+    ctx.config.askCallbackPhone &&
+    !convo.callbackAsked
+  ) {
+    const detail = await ctx.core.getCase(requireCase(convo));
+    if (!detail.callback_phone_masked) {
+      convo.callbackAsked = true;
+      convo.pendingApproval = { notificationId: notificationId!, eventId };
+      convo.stage = "awaiting_callback_phone";
+      await say(ctx, convo, copy.askCallbackPhone());
+      return;
+    }
   }
   await ctx.core.sendSignedEvent({
     event_id: eventId,

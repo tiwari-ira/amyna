@@ -45,14 +45,23 @@ Step-by-step: [`fetch/agentverse/README_AGENTVERSE.md`](../fetch/agentverse/READ
 
 ## 2. FinchNode (Member 4)
 
+FinchNode is read-only: it serves the patient's records, never an itemized bill or an
+insurer phone. One HTTP API for every online mode (the key decides the data):
+
 | Step | Env var / flag |
 |---|---|
-| Keyless synthetic demo API | `FINCHNODE_MODE=demo`. Base URL is `https://api.finchnode.com/demo/v1` when `FINCHNODE_BASE_URL` is empty. No API key. |
-| Sandbox: create a sandbox key (`ck_test_…`) | `FINCHNODE_MODE=sandbox`, `FINCHNODE_API_KEY`, `FINCHNODE_BASE_URL` |
-| Check | `python -m finchnode.client --patient <id>` prints normalized records |
+| Keyless fictional demo (patients type `patient-demo-001`) | `FINCHNODE_MODE=demo` (base `https://api.finchnode.com/demo/v1`, no key) |
+| Sign up at finchnode.com (free), create an application: purpose, categories `demographics, encounters, labs, medications, claims, documents`, sync mode **continuous** | -- |
+| Create a sandbox key (`ck_test_…`, shown once) | `FINCHNODE_MODE=sandbox`, `FINCHNODE_API_KEY` (base defaults to `https://api.finchnode.com/api/v1`) |
+| Set the application's webhook URL to `{PUBLIC_BASE_URL}/finchnode/webhook`; copy the `whsec_…` signing secret | `FINCHNODE_WEBHOOK_SECRET` |
+| Insurer phone (FinchNode has none) | `PAYER_PHONES="Example Health Plan (Synthetic)=+1…"` + `TELEPHONY_ALLOWED_NUMBERS` |
+| Production: complete the app settings (privacy policy URL, retention, webhook URL), create a `ck_live_…` key | `FINCHNODE_MODE=production` |
+| Check | `python scripts/finchnode_sandbox.py records --subject u_…` prints what Core will read |
 
-Core reads FinchNode only through `core/app/adapters/finchnode/*`, and only after a
-`health_data_access` consent on the case.
+Patients link records through FinchNode's hosted **Connect** link (sandbox/production);
+the typed-id path remains for mock/demo. Core reads FinchNode only through
+`core/app/adapters/finchnode/*`, and only after a `health_data_access` consent on the case.
+Walkthrough: [FINCHNODE_SANDBOX_DEMO.md](FINCHNODE_SANDBOX_DEMO.md).
 
 ---
 

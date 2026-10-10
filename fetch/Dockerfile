@@ -9,6 +9,8 @@ COPY pyproject.toml ./
 COPY intelligence intelligence
 COPY finchnode finchnode
 COPY fetch fetch
+# The jobs service runs scripts/job_worker.py from this image.
+COPY scripts scripts
 
 RUN pip install --no-cache-dir -e shared/python -e . -r fetch/requirements.txt
 

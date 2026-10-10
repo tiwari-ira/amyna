@@ -3,6 +3,8 @@
 export interface Button {
   id: string;
   label: string;
+  /** A link button: opens this page in the app and sends nothing back (Relay URL button). */
+  url?: string;
 }
 
 export interface OutboundMessage {

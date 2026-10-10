@@ -11,6 +11,7 @@ class MockTelephony(TelephonyAdapter):
         self.dialed: list[str] = []
         self.hung_up: list[str] = []
         self.human_dialed: list[str] = []
+        self.human_numbers: list[str] = []
         self.bridged: list[tuple[str, str]] = []
 
     def dial(self, call_id: str, to_number: str) -> DialResult:
@@ -22,11 +23,17 @@ class MockTelephony(TelephonyAdapter):
         self.hung_up.append(provider_call_ref)
 
     def dial_human(
-        self, call_id: str, to_number: str, insurer_ref: str | None = None
+        self,
+        call_id: str,
+        to_number: str,
+        insurer_ref: str | None = None,
+        *,
+        extra_allowed: frozenset[str] = frozenset(),
     ) -> DialResult:
-        ensure_allowed(to_number, self._allowed)
+        ensure_allowed(to_number, self._allowed, extra_allowed)
         ref = f"MOCK-HU-{call_id[-8:]}"
         self.human_dialed.append(call_id)
+        self.human_numbers.append(to_number)
         # The mock human answers instantly and is bridged into the insurer call.
         self.bridged.append((ref, insurer_ref or ""))
         return DialResult(provider_call_ref=ref, status="answered")

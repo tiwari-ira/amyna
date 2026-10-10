@@ -22,6 +22,7 @@ from .adapters.xai_voice.base import VoiceAdapter
 from .auth import TokenRegistry
 from .config import Settings
 from .db import make_engine, make_session_factory, session_scope
+from .services.notification_service import NotificationDispatcher
 from .services.voice_service import VoiceCallManager
 
 
@@ -37,6 +38,7 @@ class Container:
     telephony: TelephonyAdapter
     fetch_bridge: FetchBridge = field(init=False)
     voice_manager: VoiceCallManager = field(init=False)
+    notification_dispatcher: NotificationDispatcher = field(default_factory=NotificationDispatcher)
 
     def session_scope(self) -> AbstractContextManager[Session]:
         """One committed-or-rolled-back transaction."""

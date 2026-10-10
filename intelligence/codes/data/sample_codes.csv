@@ -15,3 +15,18 @@ RXNORM,6960,midazolam,midazolam,benzodiazepine,drug,midazolam,midazolam|versed,m
 LOCAL,GAD-CONTRAST,gadolinium-based contrast agent,gadolinium_contrast,contrast_agent,drug,gadolinium contrast,gadolinium-based contrast agent|gadolinium contrast,gadolinium
 ICD10CM,R51.9,"Headache, unspecified",headache,symptom,diagnosis,a headache,headache|headaches,
 ICD10CM,F41.9,"Anxiety disorder, unspecified",anxiety,mental_health,diagnosis,anxiety,anxiety|nervous,
+CPT,99395,"Preventive visit, established patient, age 18-39 (paraphrased)",preventive_visit,em_visit,service,a yearly wellness (preventive) visit,annual wellness visit|wellness visit|annual physical|yearly physical|preventive visit,
+LOCAL,wellness-visit,Annual wellness visit (FinchNode synthetic code),preventive_visit,em_visit,service,a yearly wellness (preventive) visit,,
+CPT,83036,"Hemoglobin A1c blood test (paraphrased)",hba1c_test,hba1c_test,procedure,a hemoglobin A1c blood test,a1c|a1c test|hemoglobin a1c|hba1c|glycated hemoglobin,
+LOINC,4548-4,Hemoglobin A1c in blood,hba1c_test,hba1c_test,procedure,a hemoglobin A1c blood test,,
+CPT,80061,"Lipid (cholesterol) panel (paraphrased)",lipid_panel,lipid_panel,procedure,a cholesterol (lipid) panel,lipid panel|cholesterol panel|cholesterol test,
+LOINC,13457-7,LDL cholesterol (calculated) in serum or plasma,lipid_panel,lipid_panel,procedure,a cholesterol (lipid) panel,,
+CPT,82947,"Glucose blood test (paraphrased)",glucose_test,glucose_test,procedure,a blood sugar (glucose) test,glucose test|blood sugar test|blood glucose test,
+LOINC,2345-7,Glucose in serum or plasma,glucose_test,glucose_test,procedure,a blood sugar (glucose) test,,
+CPT,82565,"Creatinine blood test (paraphrased)",creatinine_test,creatinine_test,procedure,a creatinine (kidney function) blood test,creatinine test,
+LOINC,2160-0,Creatinine in serum or plasma,creatinine_test,creatinine_test,procedure,a creatinine (kidney function) blood test,,
+CPT,84132,"Potassium blood test (paraphrased)",potassium_test,potassium_test,procedure,a potassium blood test,potassium test,
+LOINC,2823-3,Potassium in serum or plasma,potassium_test,potassium_test,procedure,a potassium blood test,,
+CPT,85018,"Hemoglobin blood test (paraphrased)",hemoglobin_test,hemoglobin_test,procedure,a hemoglobin blood test,hemoglobin test,
+LOINC,718-7,Hemoglobin in blood,hemoglobin_test,hemoglobin_test,procedure,a hemoglobin blood test,,
+RXNORM,861007,Metformin 500 mg oral tablet,metformin,biguanide,drug,metformin,metformin|glucophage,metformin

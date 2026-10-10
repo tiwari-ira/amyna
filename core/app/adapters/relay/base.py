@@ -17,6 +17,8 @@ class PatientNotifier(ABC):
     """Delivers a notification already stored in Core's outbox."""
 
     mode: str
+    #: True for network notifiers: Core delivers after commit, off the request thread.
+    deferred: bool = False
 
     @abstractmethod
     def send(self, notification: PatientNotification, case: Case) -> DeliveryResult:

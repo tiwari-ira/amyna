@@ -134,6 +134,10 @@ export class LiveTranscriber implements Transcriber {
       headers: { Authorization: `Bearer ${this.apiKey}` },
       body: form,
     });
+    if (response.status === 401 || response.status === 403) {
+      // Our key, not the patient's audio: don't ask them to re-record.
+      throw new Error(`speech-to-text is not configured (XAI_API_KEY rejected: ${response.status})`);
+    }
     if (response.status >= 400 && response.status < 500 && response.status !== 429) {
       throw new TranscriptionError(`speech-to-text rejected the audio (${response.status})`);
     }

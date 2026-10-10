@@ -54,6 +54,11 @@ services:
     env_file: ${CORE_ENV_FILE:-../.env.production}
     environment:
       CORE_BASE_URL: http://core:8080
+      # Conversations, the event ledger and voice memos must survive restarts and
+      # redeploys (otherwise patients start over and pushes for their cases are dropped).
+      RELAY_DATA_DIR: /data
+    volumes:
+      - relaydata_prod:/data
     depends_on:
       - core
 
@@ -62,6 +67,8 @@ services:
       context: ..
       dockerfile: fetch/Dockerfile
     restart: unless-stopped
+    # The agents need their *_SEED / *_ADDRESS values (they refuse to start without them).
+    env_file: ${CORE_ENV_FILE:-../.env.production}
     environment:
       FETCH_MODE: agentverse
       CORE_BASE_URL: http://core:8080
@@ -75,6 +82,7 @@ services:
       context: ..
       dockerfile: fetch/Dockerfile
     restart: unless-stopped
+    env_file: ${CORE_ENV_FILE:-../.env.production}
     environment:
       CORE_BASE_URL: http://core:8080
       WORKER_INTERVAL_S: ${WORKER_INTERVAL_S:-5}
@@ -99,3 +107,4 @@ services:
 volumes:
   pgdata_prod:
   backups_prod:
+  relaydata_prod:

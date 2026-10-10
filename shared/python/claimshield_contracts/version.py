@@ -7,5 +7,5 @@ Bump rules (see docs/BRANCH_WORKFLOW.md):
   schema digest, so every agent must be restarted on the same version.
 """
 
-CONTRACTS_VERSION = "1.0.0"
+CONTRACTS_VERSION = "1.1.0"  # 1.1: FinchNode Connect, claim summaries, record completeness
 AGENT_PROTOCOL_VERSION = "1.0.0"

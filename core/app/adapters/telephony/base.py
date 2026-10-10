@@ -23,9 +23,17 @@ class TelephonyAdapter(ABC):
     def hangup(self, provider_call_ref: str) -> None: ...
 
     def dial_human(
-        self, call_id: str, to_number: str, insurer_ref: str | None = None
+        self,
+        call_id: str,
+        to_number: str,
+        insurer_ref: str | None = None,
+        *,
+        extra_allowed: frozenset[str] = frozenset(),
     ) -> DialResult | None:
-        """Dial a human to merge them into the paused call. None = unsupported."""
+        """Dial a human to merge them into the paused call. None = unsupported.
+
+        ``extra_allowed`` = the case's own patient-confirmed callback number, which Core
+        permits beyond TELEPHONY_ALLOWED_NUMBERS only when TELEPHONY_ALLOW_PATIENT_PHONES."""
         return None
 
     def bridge_calls(self, human_ref: str, insurer_ref: str) -> None:
@@ -33,9 +41,11 @@ class TelephonyAdapter(ABC):
         return None
 
 
-def ensure_allowed(number: str, allowed: frozenset[str]) -> None:
+def ensure_allowed(
+    number: str, allowed: frozenset[str], extra: frozenset[str] = frozenset()
+) -> None:
     """Second line of defense for the dial allowlist (VoiceCallManager checks first)."""
-    if number not in allowed:
+    if number not in allowed and number not in extra:
         raise SafetyBlocked(
             "Refusing to dial a number outside TELEPHONY_ALLOWED_NUMBERS.",
             code="number_not_allowed",

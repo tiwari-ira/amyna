@@ -27,15 +27,24 @@ Legend: ☐ = still to verify · ☑ = verified while building the scaffold (how
 
 ## FinchNode (Member 4)
 
-| | Item | Where |
-|---|---|---|
-| ☐ | Demo (keyless) and sandbox base URLs | `finchnode/client.py:5`, `.env.example` |
-| ☐ | Endpoint paths (`/fhir/Patient/{id}`, `/fhir/{ResourceType}?patient=`) and whether responses are FHIR R4 Bundles | `finchnode/client.py:76-77` |
-| ☐ | Auth header for sandbox (`Authorization: Bearer ck_test_…`) and the key prefix | `finchnode/client.py:33,102` |
-| ☐ | Pagination (`Bundle.link[relation=next]`) | `finchnode/client.py:138` |
-| ☐ | Which resource types exist for claims (Claim vs ExplanationOfBenefit) and medications (MedicationAdministration vs MedicationStatement/Request); `normalize.py` already accepts all of them | `finchnode/normalize.py`, `finchnode/tools.py` |
-| ☐ | Coverage → payer name/phone/member id location | `finchnode/normalize.py::normalize_patient` |
-| ☐ | Whether an MCP server exists and is worth using | `finchnode/mcp_optional.md` |
+Verified 2026-10-09 against finchnode.com/docs (Markdown at `finchnode.com/docs/<page>.md`,
+index `finchnode.com/llms.txt`, spec `finchnode.com/openapi.yaml`) and the live public demo.
+
+| | Item | Answer | Where |
+|---|---|---|---|
+| ☑ | Base URLs | demo `https://api.finchnode.com/demo/v1` (keyless); sandbox and production share `https://api.finchnode.com/api/v1` | `finchnode/client.py` |
+| ☑ | Endpoint paths / FHIR | Only the demo serves FHIR, and it has no `Procedure` or `Claim` type. Every environment serves the normalized snapshot `GET /users/{subject}/records` (plus `/records/{category}` pages and a `/changes` feed), which is all Core reads | `finchnode/records.py` |
+| ☑ | Auth + keys | `Authorization: Bearer ck_test_…` (sandbox) / `ck_live_…` (production) | `finchnode/client.py` |
+| ☑ | Pagination | Category pages use `limit`/`cursor` → `hasMore`/`nextCursor`; the snapshot returned complete data for the 40-lab demo patient | `finchnode/client.py` |
+| ☑ | Claims / medications | Claims are `ExplanationOfBenefit` summaries with **no line items** (`ClaimRecord`: status, outcome, claimType, providerName); medications are Request/Dispense/Administration (only administrations count as "given") | `finchnode/records.py` |
+| ☑ | Coverage | `claims.coverages`: payor name + `subscriberId`, **no phone** → `PAYER_PHONES` | `finchnode/records.py`, `core/app/config.py` |
+| ☑ | Completeness | `meta.syncStatus`, `availableCategories`, `missingCategories`, `warnings` (`source_unavailable`…); shared categories in `categories` | `finchnode/records.py::Snapshot.gap` |
+| ☑ | Errors | `{error:{type,code,message,requestId}}`; 410 `consent_inactive`, 429 + `Retry-After`, 300 req/min/key | `finchnode/client.py` |
+| ☑ | Linking | Hosted Connect: `POST /connect/sessions` → `url`; `consent.granted` webhook / `GET /connect/sessions/{id}` gives the `subject` (`u_` + 16 hex) | `core/app/services/finchnode_service.py` |
+| ☑ | Webhooks | `FinchNode-Signature: t=…,v1=<hex HMAC-SHA256(whsec, "t." + body)>`, `FinchNode-Event-Id`, answer within 5 s, retries ~41 h | `core/app/services/finchnode_service.py` |
+| ☑ | MCP server | exists (`api.finchnode.com/demo/mcp`, `api.finchnode.com/api/mcp`); not used | `finchnode/mcp_optional.md` |
+| ☐ | Sandbox `records.advance` content for `baseline-adult` (which records the next phase adds) | run it once and read `/changes` | `scripts/finchnode_sandbox.py` |
+| ☐ | Snapshot completeness for very large production records (vs paging categories) | verify with a real patient | `finchnode/client.py` |
 
 ## Relay (Member 2)
 

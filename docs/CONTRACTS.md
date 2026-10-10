@@ -57,6 +57,15 @@ timestamps = ISO-8601 UTC; every response carries `X-Amyna-Contracts-Version`.
 | POST | `/voice/{call_id}/event` | `voice:events` | `VoiceEventIn` → `VoiceEventResult` |
 | POST | `/voice/{call_id}/human-handoff` | `voice:handoff` | `HandoffIn` → `HumanIntervention` (201) |
 | POST | `/relay/webhook` | HMAC | `RelayWebhookEvent` → `RelayWebhookResult` · idempotent by `event_id` |
+| POST | `/auth/session` | `sessions:issue` | `AuthSessionCreate` → `AuthSessionResult` (201) · `relay:<handle>` in any env; other subjects dev/test/staging only |
+| GET | `/cases/{case_id}/finchnode/claims` | `cases:read` | → `FinchNodeClaims` (bill summaries; `itemized=false` → upload the itemized bill) |
+| PUT | `/cases/{case_id}/callback-phone` | `cases:write` | `CallbackPhoneIn` → `Case` · the patient's own number for the handoff leg |
+| POST | `/finchnode/connect-sessions` | `cases:write` | `FinchNodeConnectCreate` → `FinchNodeConnectSession` (201) · 409 `connect_unavailable` in mock/demo |
+| GET | `/finchnode/connect-sessions/{id}` | `cases:read` | → `FinchNodeConnectSession` · reads FinchNode back and finishes linking |
+| POST | `/finchnode/webhook` | FinchNode signature | FinchNode event → 204 (200 duplicate) · `consent.granted`, `records.updated`, `consent.revoked`… |
+
+Relay-originated calls on a user-owned case must forward that patient's
+`X-Amyna-Patient-Token` on every route above (not only `/cases/*`).
 
 Interactive docs: http://localhost:8080/docs (Authorize with a service token).
 

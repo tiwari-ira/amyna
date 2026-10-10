@@ -98,8 +98,15 @@ class PhiRedactingFilter(logging.Filter):
     """Redacts the message, structured ``fields`` and traceback text of every record."""
 
     def filter(self, record: logging.LogRecord) -> bool:
-        record.msg = redact_text(record.getMessage())
-        record.args = ()
+        if record.name == "uvicorn.access" and isinstance(record.args, tuple):
+            # uvicorn's AccessFormatter unpacks these five args itself; redact each one
+            # and keep the shape (clearing them broke every access-log line).
+            record.args = tuple(
+                redact_text(arg) if isinstance(arg, str) else arg for arg in record.args
+            )
+        else:
+            record.msg = redact_text(record.getMessage())
+            record.args = ()
         fields = getattr(record, "fields", None)
         if isinstance(fields, dict):
             record.fields = redact(fields)

@@ -1,4 +1,4 @@
-"""FinchNode adapters: mock (fixtures) | demo | sandbox."""
+"""FinchNode adapters: mock (fixtures) | demo | sandbox | production (one HTTP API)."""
 
 from ...config import Settings
 from .base import FinchNodeAdapter

@@ -1,6 +1,7 @@
 """Case lifecycle: creation, lookup, consents, guarded transitions, read models."""
 
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from sqlalchemy import exists, func, select
@@ -20,9 +21,9 @@ from claimshield_contracts.ids import new_id
 from claimshield_contracts.models import CaseDetail, PatientRef, TimelineEvent
 
 from .. import mappers
-from ..audit import record_audit
+from ..audit import mask_phone, record_audit
 from ..db import as_utc
-from ..errors import ConsentRequired, DomainError, NotFound
+from ..errors import ConsentRequired, DomainError, InvalidInput, NotFound
 from ..models_db import (
     AgentRunRow,
     AuditRow,
@@ -122,8 +123,12 @@ def find_or_create_case(
     With a claim number, a case matches if it is tagged with it or already holds that
     claim; otherwise an open case with no claim yet (e.g. a recorded visit waiting for
     its bill) is adopted. A case holding a different claim is never reused.
+
+    This path (ASI:One via the agents) has no patient session, so it only ever
+    reuses anonymous cases: a signed-in patient's case is never adopted, or its
+    records and decisions would be reachable by anyone holding the patient id.
     """
-    candidates = open_cases(db, finchnode_patient_id)
+    candidates = [c for c in open_cases(db, finchnode_patient_id) if c.user_id is None]
     claims = {
         row.case_id: row.external_claim_id
         for row in db.scalars(
@@ -214,6 +219,29 @@ def record_consent(
     return consent
 
 
+def normalize_phone(raw: str) -> str:
+    """A US/E.164 number as typed by a patient -> ``+15551234567`` (InvalidInput otherwise)."""
+    digits = re.sub(r"\D", "", raw)
+    if raw.strip().startswith("+") and 8 <= len(digits) <= 15:
+        return f"+{digits}"
+    if len(digits) == 10:
+        return f"+1{digits}"
+    if len(digits) == 11 and digits.startswith("1"):
+        return f"+{digits}"
+    raise InvalidInput("That doesn't look like a phone number.", code="invalid_phone")
+
+
+def set_callback_phone(db: Session, case: CaseRow, raw: str, *, actor: str) -> None:
+    case.patient_phone = normalize_phone(raw)
+    record_audit(
+        db,
+        actor=actor,
+        action="case.callback_phone_set",
+        case_id=case.id,
+        details={"phone": mask_phone(case.patient_phone)},
+    )
+
+
 def enrich_patient(db: Session, container: "Container", case: CaseRow) -> None:
     """Fill blank patient fields from FinchNode (only ever called after consent).
 
@@ -229,7 +257,11 @@ def enrich_patient(db: Session, container: "Container", case: CaseRow) -> None:
     case.patient_display_name = case.patient_display_name or profile.display_name
     case.member_ref = case.member_ref or profile.member_ref
     case.payer_name = case.payer_name or profile.payer_name
-    case.payer_phone = case.payer_phone or profile.payer_phone
+    case.payer_phone = (
+        case.payer_phone
+        or profile.payer_phone
+        or container.settings.payer_phone_for(case.payer_name)
+    )
     case.patient_state = case.patient_state or profile.state
     record_audit(db, actor="core", action="case.enriched_from_finchnode", case_id=case.id)
 

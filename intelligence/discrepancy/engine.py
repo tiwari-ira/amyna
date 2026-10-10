@@ -105,6 +105,13 @@ class _Support:
     encounters: dict[date, list[EvidenceRef]] = field(default_factory=lambda: defaultdict(list))
     record_dates: set[date] = field(default_factory=set)
     negated: set[str] = field(default_factory=set)
+    #: False when FinchNode could not provide every record type completely: then the
+    #: absence of a record proves nothing and is never cited as evidence.
+    records_complete: bool = True
+
+    def records_checked(self, day: date) -> bool:
+        """FinchNode records can testify about ``day`` (complete, and something that day)."""
+        return self.records_complete and day in self.record_dates
 
     def add_entry(self, entry: CodeEntry, dated: Dated, *, medication: bool) -> None:
         self.by_concept[entry.concept].append(dated)
@@ -138,8 +145,9 @@ def _build_support(
     resolver: CodeResolver,
     visit_id: str | None,
     config: EngineConfig,
+    records_complete: bool = True,
 ) -> _Support:
-    support = _Support()
+    support = _Support(records_complete=records_complete)
     if visit_id:
         support.visit_ref = EvidenceRef(
             source=EvidenceSource.VISIT_TRANSCRIPT,
@@ -156,11 +164,16 @@ def _build_support(
                 f"FinchNode {record.record_type.value}: {record.display} ({record.occurred_on})"
             ),
         )
+        dated: Dated = (ref, record.occurred_on)
         if record.record_type == RecordType.ENCOUNTER:
             if record.occurred_on:
                 support.encounters[record.occurred_on].append(ref)
+            # A coded visit type (e.g. a wellness visit) supports the visit's own E/M line.
+            for code in record.codes:
+                support.by_code[(code.system, code.code.upper())].append(dated)
+                if entry := resolver.entry_for(code):
+                    support.add_entry(entry, dated, medication=False)
             continue
-        dated: Dated = (ref, record.occurred_on)
         for code in record.codes:  # prefer codes already present in source records
             support.by_code[(code.system, code.code.upper())].append(dated)
         entries = [entry for code in record.codes if (entry := resolver.entry_for(code))]
@@ -294,9 +307,41 @@ class _Analysis:
         if entry.concept in self.support.negated:
             return 0.95
         sources = int(self.support.visit_ref is not None) + int(
-            line.date_of_service in self.support.record_dates
+            self.support.records_checked(line.date_of_service)
         )
         return {2: 0.85, 1: 0.7}.get(sources, 0.5)
+
+    def sources_checked(self, day: date) -> str:
+        """Plain-language list of what was actually searched for ``day``."""
+        checked = []
+        if self.support.visit_ref:
+            checked.append("the visit recording")
+        if self.support.records_checked(day):
+            checked.append(f"your FinchNode records for {day}")
+        if not checked:
+            return "the records Amyna could load"
+        return " or ".join(checked)
+
+    def not_mentioned(self, day: date, label: str) -> str:
+        """ "neither X nor Y mention <label>" built from what was actually checked."""
+        visit = self.support.visit_ref is not None
+        records = self.support.records_checked(day)
+        if visit and records:
+            return (
+                f"neither the visit recording nor your FinchNode records for {day} mention {label}"
+            )
+        if visit:
+            return f"the visit recording doesn't mention {label}"
+        if records:
+            return f"your FinchNode records for {day} don't mention {label}"
+        return f"nothing Amyna could check mentions {label}"
+
+    def incomplete_note(self) -> str:
+        return (
+            ""
+            if self.support.records_complete
+            else " Some of your FinchNode records could not be loaded, so they were not checked."
+        )
 
     def checked_refs(self, line: ClaimLine, label: str) -> list[EvidenceRef]:
         """Evidence that was searched and did not mention the billed item."""
@@ -307,7 +352,7 @@ class _Analysis:
                     update={"description": f"Visit transcript reviewed: no mention of {label}"}
                 )
             )
-        if line.date_of_service in self.support.record_dates:
+        if self.support.records_checked(line.date_of_service):
             refs.append(
                 EvidenceRef(
                     source=EvidenceSource.FINCHNODE_RECORD,
@@ -349,7 +394,10 @@ class _Analysis:
             line,
             issue=IssueType.UNSUPPORTED_CHARGE,
             title=f"{line.description} without a documented visit",
-            explanation=f"No visit at {place} on {line.date_of_service} appears in your records.",
+            explanation=(
+                f"No visit at {place} on {line.date_of_service} appears in "
+                f"{self.sources_checked(line.date_of_service)}.{self.incomplete_note()}"
+            ),
             confidence=self.absence_confidence(line, entry),
             action=DisputeAction.REMOVE_CHARGE,
             refs=self.checked_refs(line, "visit"),
@@ -388,6 +436,7 @@ class _Analysis:
             f"Line {line.line_number} bills {money(line.billed_cents)} under {billed} {what}. "
             f"Documented medications: {', '.join(labels) if labels else 'none'}."
             + (f" Possibly {', '.join(unbilled)}, which has no separate line." if unbilled else "")
+            + self.incomplete_note()
         )
         self.assess(line, LineMatchStatus.UNKNOWN, entry, [], note="drug not identified")
         self.flag(
@@ -437,9 +486,9 @@ class _Analysis:
             title=f"{line.description} not supported by records",
             explanation=(
                 f"Line {line.line_number} bills {line.code.system.value} {line.code.code} "
-                f"({line.description}) for {money(line.billed_cents)}, but neither the visit "
-                f"recording nor your FinchNode records for {line.date_of_service} mention "
-                f"{entry.plain_label}."
+                f"({line.description}) for {money(line.billed_cents)}, but "
+                f"{self.not_mentioned(line.date_of_service, entry.plain_label)}."
+                f"{self.incomplete_note()}"
             ),
             confidence=self.absence_confidence(line, entry),
             action=DisputeAction.REMOVE_CHARGE,
@@ -518,8 +567,12 @@ def analyze_claim(
     visit_id: str | None = None,
     price_index: HospitalPriceIndex | None = None,
     config: EngineConfig | None = None,
+    records_complete: bool = True,
 ) -> AnalysisResult:
-    """Compare every claim line against records + visit evidence (deterministic)."""
+    """Compare every claim line against records + visit evidence (deterministic).
+
+    ``records_complete=False`` (FinchNode reported missing or partial categories)
+    keeps the comparison but never cites the records' silence as evidence."""
     config = config or EngineConfig()
-    support = _build_support(records, evidence, resolver, visit_id, config)
+    support = _build_support(records, evidence, resolver, visit_id, config, records_complete)
     return _Analysis(claim, support, resolver, price_index, config).run()

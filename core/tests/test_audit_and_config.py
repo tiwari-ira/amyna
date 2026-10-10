@@ -141,6 +141,7 @@ def _live_overrides(app_env: str, finchnode_mode: str) -> dict[str, object]:
         "finchnode_mode": finchnode_mode,
         "finchnode_api_key": "ck_live" if finchnode_mode == "production" else "ck_test_x",
         "finchnode_base_url": "" if finchnode_mode == "production" else "https://sandbox.example",
+        "finchnode_webhook_secret": "whsec_finchnode_test",
         "relay_service_token": "r",
         "fetch_service_token": "f",
         "voice_service_token": "v",
@@ -213,3 +214,30 @@ def test_production_refuses_a_tunnel_public_url() -> None:
     assert any("tunnel" in m for m in settings.environment_mistakes())
     staging = _settings(**_live_overrides("staging", "sandbox"))
     assert any("tunnel" in m for m in staging.environment_mistakes()) is False
+
+
+def test_uvicorn_access_lines_are_redacted_not_broken() -> None:
+    """Regression: clearing record.args broke uvicorn's AccessFormatter on every request."""
+    import io
+    import logging
+
+    from uvicorn.logging import AccessFormatter
+
+    from app.audit import PhiRedactingFilter
+
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(AccessFormatter('%(client_addr)s - "%(request_line)s" %(status_code)s'))
+    handler.addFilter(PhiRedactingFilter())
+    record = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        __file__,
+        1,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1:5000", "GET", "/cases/x?email=jane@example.com", "1.1", 200),
+        None,
+    )
+    handler.handle(record)
+    line = stream.getvalue()
+    assert "GET /cases/x" in line and "200" in line and "jane@example.com" not in line

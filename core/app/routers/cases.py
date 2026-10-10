@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Request, status
 
-from claimshield_contracts.api import CaseCreate, ConsentCreate
+from claimshield_contracts.api import CallbackPhoneIn, CaseCreate, ConsentCreate, FinchNodeClaims
 from claimshield_contracts.models import (
     Case,
     CaseDetail,
@@ -110,6 +110,41 @@ def get_timeline(
     with container.session_scope() as db:
         assert_case_access(case_service.get_case_row(db, case_id), _patient_user(db, request))
         return case_service.timeline(db, case_id)
+
+
+@router.put("/{case_id}/callback-phone", response_model=Case)
+def set_callback_phone(
+    case_id: str,
+    body: CallbackPhoneIn,
+    request: Request,
+    identity: ServiceIdentity = Depends(require_scopes("cases:write")),
+    container: Container = Depends(get_container),
+) -> Case:
+    """The patient's own number for joining an insurer call when it pauses for them
+    (replaces the single HUMAN_HANDOFF_PHONE for this case)."""
+    with container.session_scope() as db:
+        case = case_service.get_case_row(db, case_id)
+        assert_case_access(case, _patient_user(db, request))
+        case_service.set_callback_phone(db, case, body.phone, actor=identity.actor)
+        return mappers.case_to_model(case)
+
+
+@router.get("/{case_id}/finchnode/claims", response_model=FinchNodeClaims)
+def get_finchnode_claims(
+    case_id: str,
+    request: Request,
+    _: ServiceIdentity = Depends(require_scopes("cases:read")),
+    container: Container = Depends(get_container),
+) -> FinchNodeClaims:
+    """The patient's bills on FinchNode, newest first (needs health-data consent).
+
+    FinchNode bills are summaries: ``itemized=false`` means the patient must send the
+    itemized statement before Amyna can check it."""
+    from ..services import claim_service
+
+    with container.session_scope() as db:
+        assert_case_access(case_service.get_case_row(db, case_id), _patient_user(db, request))
+        return claim_service.finchnode_claims(db, container, case_id)
 
 
 @router.get("/{case_id}/notifications", response_model=list[PatientNotification])

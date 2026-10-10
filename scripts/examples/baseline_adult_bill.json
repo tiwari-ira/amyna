@@ -1,0 +1,16 @@
+{
+  "_comment": "Made-up itemized bill for FinchNode's synthetic sandbox patient (scenario baseline-adult, Morgan Rivera) for the 2026-07-18 wellness visit. Synthetic data only. Planted problems: line 3 repeats line 2 (duplicate HbA1c) and line 6 bills a brain MRI that never happened. Upload with scripts/upload_bill.py.",
+  "external_claim_id": "NSH-2026-0718-0042",
+  "payer_name": "Example Health Plan (Synthetic)",
+  "provider_name": "Northstar Health System (Synthetic)",
+  "facility_name": "Northstar Demo Clinic (Synthetic)",
+  "date_of_service": "2026-07-18",
+  "lines": [
+    {"line_number": 1, "code": {"system": "CPT", "code": "99395", "display": "Preventive visit, established patient, 18-39"}, "description": "Preventive visit, established patient", "date_of_service": "2026-07-18", "units": 1, "billed_cents": 26500},
+    {"line_number": 2, "code": {"system": "CPT", "code": "83036", "display": "Hemoglobin A1c"}, "description": "Hemoglobin A1c", "date_of_service": "2026-07-18", "units": 1, "billed_cents": 4800},
+    {"line_number": 3, "code": {"system": "CPT", "code": "83036", "display": "Hemoglobin A1c"}, "description": "Hemoglobin A1c", "date_of_service": "2026-07-18", "units": 1, "billed_cents": 4800},
+    {"line_number": 4, "code": {"system": "CPT", "code": "80061", "display": "Lipid panel"}, "description": "Lipid panel", "date_of_service": "2026-07-18", "units": 1, "billed_cents": 6200},
+    {"line_number": 5, "code": {"system": "CPT", "code": "82947", "display": "Glucose, blood"}, "description": "Glucose, blood", "date_of_service": "2026-07-18", "units": 1, "billed_cents": 1900},
+    {"line_number": 6, "code": {"system": "CPT", "code": "70551", "display": "MRI brain without contrast"}, "description": "MRI brain without contrast", "date_of_service": "2026-07-18", "units": 1, "billed_cents": 180000}
+  ]
+}

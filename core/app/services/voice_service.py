@@ -61,6 +61,7 @@ from .security_policy import (
     check_agent_utterance,
     detect_sensitive_request,
     reject_sensitive_notes,
+    reject_sensitive_reference,
 )
 
 if TYPE_CHECKING:
@@ -108,8 +109,9 @@ def record_insurer_response(
     referenced = set(req.removed_line_ids) | set(req.itemization_requested_line_ids)
     if not referenced <= line_ids:
         raise InvalidInput("Response references claim lines that are not on this claim")
-    for text in (req.notes, req.representative_name, req.reference_number):
+    for text in (req.notes, req.representative_name):
         reject_sensitive_notes(text)
+    reject_sensitive_reference(req.reference_number)
     response = InsurerResponse(
         outcome=req.outcome,
         reference_number=req.reference_number,
@@ -169,9 +171,14 @@ class VoiceCallManager:
             dispute = latest_dispute(db, case_id)
             if dispute is None:
                 raise Conflict("No dispute exists for this case.", code="no_dispute")
-            number = case.payer_phone
+            number = case.payer_phone or self._c.settings.payer_phone_for(case.payer_name)
             if not number:
-                raise InvalidInput("No insurer phone number is on file for this case.")
+                raise InvalidInput(
+                    "No insurer phone number is on file for this case "
+                    "(FinchNode coverage has none; set PAYER_PHONES).",
+                    code="payer_phone_missing",
+                )
+            case.payer_phone = number
             if number not in self._c.settings.allowed_numbers():
                 raise SafetyBlocked(
                     "Insurer number is not in TELEPHONY_ALLOWED_NUMBERS; refusing to dial.",
@@ -442,7 +449,8 @@ class VoiceCallManager:
         """17A: immediately connect the patient to the SAME live insurer call.
 
         Pause AI output (done by _pause_for_human), preserve the insurer
-        connection, and dial HUMAN_HANDOFF_PHONE as a second leg. Live telephony
+        connection, and dial the patient as a second leg: the case's own
+        patient-confirmed callback number, else HUMAN_HANDOFF_PHONE. Live telephony
         bridges them on the human's call.answered webhook; the mock answers
         instantly. ``merge_phase`` tracks the first-class lifecycle; the call is
         paused and the AI stays silent the whole time. Idempotent: a duplicate
@@ -451,10 +459,23 @@ class VoiceCallManager:
         A dial failure escalates to MERGE_FAILED -- never a silent fallback and
         never an automatic resume.
         """
-        number = self._c.settings.human_handoff_phone
+        settings = self._c.settings
+        with self._c.session_scope() as db:
+            patient_phone = get_case_row(db, _get_call(db, call_id).case_id).patient_phone
+        number = patient_phone or settings.human_handoff_phone
         if not number or not insurer_ref:
             return
-        deadline = utcnow() + timedelta(seconds=self._c.settings.human_merge_timeout_s)
+        # The patient's own confirmed number may be dialed without being allowlisted
+        # only when TELEPHONY_ALLOW_PATIENT_PHONES=true (one number per patient).
+        extra_allowed = (
+            frozenset({patient_phone})
+            if patient_phone and settings.telephony_allow_patient_phones
+            else frozenset()
+        )
+        if number not in settings.allowed_numbers() | extra_allowed:
+            self._mark_merge_failed(call_id, "the patient's number is not allowed to be dialed")
+            return
+        deadline = utcnow() + timedelta(seconds=settings.human_merge_timeout_s)
         with self._c.session_scope() as db:
             call = _get_call(db, call_id)
             if call.human_call_ref or call.merge_phase in (
@@ -467,7 +488,8 @@ class VoiceCallManager:
             call.merge_phase = CallMergePhase.PATIENT_BEING_CONNECTED.value
             call.merge_deadline_at = deadline
         try:
-            result = self._c.telephony.dial_human(call_id, number, insurer_ref)
+            extra = {"extra_allowed": extra_allowed} if extra_allowed else {}
+            result = self._c.telephony.dial_human(call_id, number, insurer_ref, **extra)
         except Exception:
             log.exception(
                 "human merge dial failed",
@@ -517,9 +539,9 @@ class VoiceCallManager:
                 db,
                 self._c,
                 case,
-                "I couldn't reach your phone number to connect you to the call. "
-                "The insurer is still on the line. Please check that your phone can "
-                "receive calls, then tell me when you're ready and I'll try again.",
+                "I couldn't reach your phone to connect you to the call, and the insurer "
+                "is still on the line. Tap Done to let me continue without sharing what "
+                "they asked for, or Cancel call to end the call.",
             )
 
     def expire_overdue_merges(self, *, now=None) -> int:

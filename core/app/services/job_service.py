@@ -133,6 +133,15 @@ def drain(container: "Container", *, limit: int = 25) -> dict[str, int]:
             continue
         _finish(container, job.id, JOB_SUCCEEDED)
         ran += 1
+    # Periodic sweeps ride every worker tick (nothing else schedules them): escalate
+    # patients who never answered the human-merge call (17A; never auto-resume).
+    try:
+        escalated = container.voice_manager.expire_overdue_merges()
+    except Exception as exc:  # a sweep failure must not fail the drain
+        log.warning("merge sweep failed (%s)", type(exc).__name__)
+    else:
+        if escalated:
+            log.info("merge sweep escalated %d unanswered patient call(s)", escalated)
     return {"ran": ran, "failed": failed}
 
 

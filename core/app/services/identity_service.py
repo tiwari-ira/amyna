@@ -32,6 +32,9 @@ def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+RELAY_SUBJECT_PREFIX = "relay:"
+
+
 def create_demo_session(
     db: Session, *, app_env: str, subject: str, display_name: str | None = None
 ) -> tuple[UserRow, str]:
@@ -42,6 +45,23 @@ def create_demo_session(
             "issue the patient's session token.",
             code="dev_sessions_disabled",
         )
+    return _issue(db, subject=subject, display_name=display_name)
+
+
+def create_relay_session(
+    db: Session, *, subject: str, display_name: str | None = None
+) -> tuple[UserRow, str]:
+    """Session for a Relay messaging handle, in any environment.
+
+    The caller is the authenticated Relay service, and the handle comes from a Relay
+    platform event whose signature it verified: Relay is the identity provider for
+    ``relay:<handle>`` subjects (one account per handle)."""
+    if not subject.startswith(RELAY_SUBJECT_PREFIX) or len(subject) <= len(RELAY_SUBJECT_PREFIX):
+        raise Forbidden("Relay sessions need a relay:<handle> subject.", code="invalid_subject")
+    return _issue(db, subject=subject, display_name=display_name)
+
+
+def _issue(db: Session, *, subject: str, display_name: str | None) -> tuple[UserRow, str]:
     user = db.scalar(select(UserRow).where(UserRow.auth_subject == subject))
     if user is None:
         user = UserRow(id=new_id("user"), auth_subject=subject, display_name=display_name)

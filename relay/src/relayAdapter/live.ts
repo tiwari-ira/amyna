@@ -54,14 +54,18 @@ export class LiveRelayAdapter implements RelayAdapter {
     const buttons = message.buttons ?? [];
     const parts: unknown[] = [{ type: "text", value: message.text }];
     if (buttons.length) {
-      parts.push({ type: "buttons", items: buttons.slice(0, 5).map((b) => ({ label: b.label })) });
+      parts.push({
+        type: "buttons",
+        items: buttons.slice(0, 5).map((b) => (b.url ? { label: b.label, url: b.url } : { label: b.label })),
+      });
     }
     const sent = await this.call<{ message: { id: string } }>(
       "/v1/messages",
       { to: [to], message: { parts } },
       randomUUID(),
     );
-    if (buttons.length) this.lastButtons.set(to, buttons);
+    const replies = buttons.filter((b) => !b.url); // a link tap sends nothing back
+    if (replies.length) this.lastButtons.set(to, replies);
     return { id: sent.message.id };
   }
 
