@@ -13,6 +13,7 @@ export type Stage =
   | "ready_for_bill"
   | "awaiting_claim_id"
   | "awaiting_callback_phone"
+  | "awaiting_insurer_call"
   | "in_review"
   | "done";
 
@@ -49,6 +50,8 @@ export interface Conversation {
   /** An approval waiting for the patient's callback number (asked once). */
   pendingApproval?: { notificationId: string; eventId: string };
   callbackAsked?: boolean;
+  /** Asked once, after they approve the dispute, before the agent dials the insurer. */
+  insurerCallAsked?: boolean;
   /** Core notifications already shown to the patient (rendered exactly once). */
   delivered: Record<string, DeliveredNotification>;
 }

@@ -97,6 +97,28 @@ async function analyzeAndReview(ctx: HandlerContext, convo: Conversation): Promi
   await syncAndAdvance(ctx, convo);
 }
 
+/** After they approve the dispute: the agent asks, then dials the insurer number already on file. */
+export async function answerInsurerCall(
+  ctx: HandlerContext,
+  convo: Conversation,
+  choice: string | undefined,
+): Promise<void> {
+  const pending = convo.pendingApproval;
+  if (!pending) {
+    convo.stage = "in_review";
+    return;
+  }
+  if (choice !== BUTTONS.callInsurer.id && choice !== "YES") {
+    convo.pendingApproval = undefined;
+    convo.stage = "done";
+    await say(ctx, convo, copy.insurerCallDeclined);
+    return;
+  }
+  convo.pendingApproval = undefined;
+  convo.stage = "in_review";
+  await replyToNotification(ctx, convo, `ntf:${pending.notificationId}:APPROVE`, pending.eventId);
+}
+
 /** Before the insurer call: the patient's own number for the human-merge leg (asked once). */
 export async function captureCallbackPhone(
   ctx: HandlerContext,
@@ -144,11 +166,19 @@ export async function replyToNotification(
     await say(ctx, convo, detail.dispute?.letter_text ?? "The dispute letter is not ready yet.");
     return;
   }
+  if (delivered.kind === "approval_request" && choice === "APPROVE" && !convo.insurerCallAsked) {
+    convo.insurerCallAsked = true;
+    convo.pendingApproval = { notificationId: notificationId!, eventId };
+    convo.stage = "awaiting_insurer_call";
+    await say(ctx, convo, copy.askInsurerCall());
+    return;
+  }
   if (
     delivered.kind === "approval_request" &&
     choice === "APPROVE" &&
     ctx.config.askCallbackPhone &&
-    !convo.callbackAsked
+    !convo.callbackAsked &&
+    !convo.insurerCallAsked
   ) {
     const detail = await ctx.core.getCase(requireCase(convo));
     if (!detail.callback_phone_masked) {

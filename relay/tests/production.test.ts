@@ -104,23 +104,33 @@ describe("picking a FinchNode bill", () => {
   });
 });
 
-describe("callback number before the insurer call", () => {
-  it("asks once for the patient's number, then approves", async () => {
-    const { core, relay, ctx, send, tap } = setup();
-    ctx.config.askCallbackPhone = true;
+describe("consent before the insurer call", () => {
+  it("asks whether to call the insurer, then approves only on yes", async () => {
+    const { core, relay, send, tap } = setup();
     await toBillReview(send);
     await send({ kind: "button", buttonId: "REVIEW_BILL" });
     await send({ text: "CLM-2026-0915-001" });
     await tap(":NO");
     await tap(":APPROVE");
-    expect(texts(relay).at(-1)).toMatch(/What number should I call/);
-    expect(core.state).toBe("AWAITING_APPROVAL"); // not approved yet
-    await send({ text: "call me" });
-    expect(texts(relay).at(-1)).toMatch(/doesn't look like a phone number/);
-    await send({ text: "(555) 555-0123" });
-    expect(core.phone).toBe("(555) 555-0123");
-    expect(texts(relay)).toContain("Thanks. If the insurer needs you, I'll call +1••••••0123.");
+    expect(texts(relay).at(-1)).toMatch(/call your insurance company/);
+    expect(texts(relay).at(-1)).toMatch(/224 number already on file/);
+    expect(core.state).toBe("AWAITING_APPROVAL");
+    await tap("CALL_INSURER");
     expect(core.events.at(-1)).toMatchObject({ dispute_id: "dsp_1", choice: "APPROVE" });
+  });
+
+  it("does not approve or dial when the patient says not now", async () => {
+    const { core, relay, ctx, send, tap } = setup();
+    await toBillReview(send);
+    await send({ kind: "button", buttonId: "REVIEW_BILL" });
+    await send({ text: "CLM-2026-0915-001" });
+    await tap(":NO");
+    await tap(":APPROVE");
+    await tap("CALL_LATER");
+    expect(texts(relay).at(-1)).toMatch(/won't call your insurance company/);
+    expect(core.events.some((event) => event.choice === "APPROVE")).toBe(false);
+    expect(core.calls).toHaveLength(0);
+    expect(ctx.store.get("patient").stage).toBe("done");
   });
 });
 
