@@ -49,6 +49,10 @@ export async function captureClaimId(
   text: string | undefined,
   choice?: string,
 ): Promise<void> {
+  if (choice === BUTTONS.reviewBill.id) {
+    await reviewBill(ctx, convo);
+    return;
+  }
   const picked = choice?.startsWith("bill:") ? choice.slice("bill:".length) : text?.match(CLAIM_NUMBER)?.[0];
   if (!picked) {
     await say(ctx, convo, "I couldn't find a claim number. It looks like CLM-2026-0915-001.");
@@ -220,6 +224,22 @@ export async function answerOpenPrompt(
     return;
   }
   await replyToNotification(ctx, convo, `ntf:${open[0]}:${choice}`, eventId);
+}
+
+const ACTIVE_CALL = new Set(["initiating", "in_progress", "paused_for_human"]);
+
+/** Dial again after a call ended without a result. The first call still starts from approval. */
+export async function redialInsurer(ctx: HandlerContext, convo: Conversation): Promise<boolean> {
+  if (!convo.caseId) return false;
+  const detail = await ctx.core.getCase(convo.caseId);
+  const active = (detail.calls ?? []).some((call) => ACTIVE_CALL.has(call.status));
+  if (detail.state !== "APPROVED" || !detail.dispute?.patient_authorization_id || active) {
+    return false;
+  }
+  convo.stage = "in_review";
+  await ctx.core.startCall(convo.caseId);
+  await syncAndAdvance(ctx, convo);
+  return true;
 }
 
 /** Show new Core notifications, then advance steps Core leaves to the interface. */

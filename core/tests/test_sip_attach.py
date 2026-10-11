@@ -118,6 +118,26 @@ def test_sip_attach_waits_for_the_signed_webhook(tmp_path) -> None:  # noqa: ANN
     assert app.state.container.telephony.human_dialed == [call["call_id"]]
 
 
+def test_whsec_base64_secret_verifies_the_standard_webhooks_way() -> None:
+    """xAI's signing key is the base64 after ``whsec_``, not the whole string."""
+    from app.adapters.xai_voice.sip_webhook import verify_xai_signature
+
+    key = b"supersecretkey!!"
+    secret = "whsec_" + base64.b64encode(key).decode()
+    body = b'{"type":"realtime.call.incoming"}'
+    timestamp = str(int(time.time()))
+    webhook_id = "msg_1"
+    signed = webhook_id.encode() + b"." + timestamp.encode() + b"." + body
+    signature = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
+    verify_xai_signature(
+        secret,
+        body,
+        webhook_id=webhook_id,
+        timestamp=timestamp,
+        signature=f"v1,{signature}",
+    )
+
+
 def test_bad_signature_is_rejected(tmp_path) -> None:  # noqa: ANN001
     app, client, relay, setup = _ready(tmp_path)
     call = client.post("/voice/start", json={"case_id": setup["case_id"]}, headers=relay).json()

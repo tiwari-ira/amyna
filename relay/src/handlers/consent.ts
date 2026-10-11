@@ -10,12 +10,23 @@ export async function askDataConsent(ctx: HandlerContext, convo: Conversation): 
   convo.stage = "awaiting_data_consent";
 }
 
+/** Spoken authorization, before a patient ID or any record is opened. */
+export async function askAccountMemo(ctx: HandlerContext, convo: Conversation): Promise<void> {
+  await say(ctx, convo, copy.accountMemo());
+  convo.stage = "awaiting_account_memo";
+}
+
 export async function answerDataConsent(
   ctx: HandlerContext,
   convo: Conversation,
   choice: string | undefined,
 ): Promise<void> {
   if (choice === BUTTONS.consentYes.id || choice === "YES") {
+    convo.healthConsentGiven = true;
+    if (!convo.caseId) {
+      await askAccountMemo(ctx, convo);
+      return;
+    }
     await ctx.core.recordConsent(requireCase(convo), {
       consent_type: "health_data_access",
       consent_text: DATA_CONSENT_TEXT,

@@ -111,8 +111,8 @@ describe("voice memo recording flow", () => {
   async function toRecordingStage(options: Parameters<typeof setup>[0]) {
     const harness = setup({ voiceMemos: true, dataDir: mkdtempSync(join(tmpdir(), "relay-")), ...options });
     await harness.send({ text: "hi" });
-    await harness.send({ text: "fn_pat_demo_001" });
     await harness.send({ kind: "button", buttonId: "CONSENT_YES" });
+    await harness.send({ text: "fn_pat_demo_001" });
     await harness.send({ kind: "button", buttonId: "RECORD_YES" });
     return harness;
   }
@@ -130,9 +130,9 @@ describe("voice memo recording flow", () => {
     expect(transcriber.refs[0]).toMatch(/^file:\/\/.*\.m4a$/);
     expect(core.visits[0]).toMatchObject({ recording_consent_id: "cns_recording", recording_ref: transcriber.refs[0] });
     expect(core.transcripts[0]?.segments[1]).toMatchObject({ speaker_label: "Speaker 2", text: /MRI with contrast/ });
-    expect(relay.outbox.at(-2)?.message.text).toMatch(/Give me a moment/);
-    expect(relay.outbox.at(-1)?.message.text).toMatch(/noted from your visit: lorazepam/);
-    expect(ctx.store.get("patient").stage).toBe("ready_for_bill");
+    expect(relay.outbox.some((m) => /noted from your visit: lorazepam/.test(m.message.text))).toBe(true);
+    expect(relay.outbox.at(-1)?.message.text).toMatch(/claim number|already on your records/);
+    expect(ctx.store.get("patient").stage).toBe("awaiting_claim_id");
   });
 
   it("asks again without claiming the case's one visit when the audio is unusable", async () => {
@@ -146,7 +146,7 @@ describe("voice memo recording flow", () => {
 
     await send({ audio: MEMO });
     expect(core.visits).toHaveLength(1);
-    expect(relay.outbox.at(-1)?.message.text).toMatch(/noted from your visit/);
+    expect(relay.outbox.some((m) => /noted from your visit/.test(m.message.text))).toBe(true);
   });
 
   it("waits for live agents to record the evidence before offering the bill review", async () => {
@@ -171,8 +171,8 @@ describe("voice memo recording flow", () => {
     expect(relay.outbox.at(-1)?.message.text).toMatch(/still going through your visit/);
 
     visitStatus = "evidence_extracted";
-    await vi.waitFor(() => expect(ctx.store.get("patient").stage).toBe("ready_for_bill"));
-    const notes = relay.outbox.at(-1)!.message;
+    await vi.waitFor(() => expect(ctx.store.get("patient").stage).toBe("awaiting_claim_id"));
+    const notes = relay.outbox.find((m) => /noted from your visit/.test(m.message.text))!.message;
     expect(notes.text).toMatch(/noted from your visit: MRI with contrast and no anesthesia\./);
     expect(notes.buttons?.map((b) => b.label)).toEqual(["Review my bill"]);
   });

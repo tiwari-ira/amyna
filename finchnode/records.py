@@ -8,15 +8,16 @@ Shape verified against the public demo on 2026-10-09 (schemaVersion 2).
 
 The functions here turn one snapshot into the shared contract models. Codes stay
 verbatim (ARCHITECTURE rule 5) and nothing is invented for missing fields: a
-record without a usable date keeps ``occurred_on=None``, and a bill without line
-items comes back with ``lines=[]`` (FinchNode claim records are never itemized).
+record without a usable date keeps ``occurred_on=None``, and a bill with no procedure code comes back with ``lines=[]``. A procedure code
+becomes one line for the claim total, because FinchNode does not split that total.
 """
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
-from claimshield_contracts.enums import ClaimSource, RecordType
-from claimshield_contracts.models import Claim, CodeRef, HealthRecord, PatientRef
+from claimshield_contracts.enums import ClaimSource, CodeSystem, RecordType
+from claimshield_contracts.models import Claim, ClaimLine, CodeRef, HealthRecord, PatientRef
 
 from .normalize import code_system_for, safe_date, to_cents, us_state
 
@@ -276,9 +277,44 @@ def _external_claim_id(eob: dict[str, Any]) -> str:
     return str(eob.get("id") or "unknown")
 
 
+def _procedure_line(
+    eob: dict[str, Any], claim_id: str, served: Any, billed_cents: int
+) -> list[ClaimLine]:
+    """One line for a real procedure code, billed the claim total.
+
+    FinchNode explanations of benefit do not split the total across charges.
+    Diagnosis-style codes stay off the line. The amount is the source total,
+    not a guessed split.
+    """
+    chosen_code: str | None = None
+    chosen_display: str | None = None
+    for item in _items(eob.get("procedureCodes")):
+        code = _text(item.get("code"))
+        if not code:
+            continue
+        display = _text(item.get("display")) or code
+        # ICD-10-PCS procedure codes are exactly 7 letters or digits.
+        # Longer local codes such as "wellness-visit" are not a billed procedure.
+        if re.fullmatch(r"[A-Za-z0-9]{7}", code) and chosen_code is None:
+            chosen_code, chosen_display = code, display
+    if not chosen_code or not chosen_display:
+        return []
+    return [
+        ClaimLine(
+            line_id=f"{claim_id}:1",
+            claim_id=claim_id,
+            line_number=1,
+            code=CodeRef(system=CodeSystem.LOCAL, code=chosen_code, display=chosen_display),
+            description=chosen_display[:500],
+            date_of_service=served,
+            units=1,
+            billed_cents=billed_cents,
+        )
+    ]
+
+
 def claims(snapshot: Snapshot) -> list[Claim]:
-    """Claim summaries. FinchNode claim records have no line items, so ``lines`` is
-    empty: Core must ask the patient for the itemized bill before analysis."""
+    """Claim summaries. A procedure code becomes one line at the claim total."""
     eobs, coverages = snapshot.claims_section()
     payer = _payer(_active_coverage(coverages))
     out = []
@@ -289,19 +325,19 @@ def claims(snapshot: Snapshot) -> list[Claim]:
             continue  # nothing to place on a timeline
         billed = eob.get("providerBilled") or {}
         provider = _text(eob.get("providerName")) or _text(eob.get("sourceName"))
+        claim_id = f"fn:{eob.get('id') or _external_claim_id(eob)}"
+        billed_cents = to_cents(billed.get("amount") if isinstance(billed, dict) else None)
         out.append(
             Claim(
-                claim_id=f"fn:{eob.get('id') or _external_claim_id(eob)}",
+                claim_id=claim_id,
                 external_claim_id=_external_claim_id(eob),
                 payer_name=_text(eob.get("insurer")) or payer,
                 provider_name=provider,
                 facility_name=provider,
                 date_of_service=served,
-                total_billed_cents=to_cents(
-                    billed.get("amount") if isinstance(billed, dict) else None
-                ),
+                total_billed_cents=billed_cents,
                 source=ClaimSource.FINCHNODE,
-                lines=[],
+                lines=_procedure_line(eob, claim_id, served, billed_cents),
             )
         )
     return out

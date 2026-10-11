@@ -113,7 +113,11 @@ def finchnode_claims(db: Session, container: "Container", case_id: str) -> Finch
                 total_billed_cents=claim.total_billed_cents,
                 itemized=bool(claim.lines),
             )
-            for claim in sorted(claims, key=lambda c: c.date_of_service, reverse=True)
+            for claim in sorted(
+                claims,
+                key=lambda c: (c.total_billed_cents, c.date_of_service.toordinal()),
+                reverse=True,
+            )
         ],
         complete=gap is None,
         gap=gap,

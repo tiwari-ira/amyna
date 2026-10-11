@@ -7,6 +7,7 @@ import { BUTTONS, RECORDING_CONSENT_TEXT, copy } from "../ux/messages";
 import type { Conversation } from "../store";
 import { ingestRecording } from "./audioIngest";
 import type { Schemas } from "../coreClient";
+import { reviewBill } from "./approvalFlow";
 import { type HandlerContext, requireCase, say, serialize } from "./context";
 import { TranscriptionError } from "./transcription";
 
@@ -117,6 +118,7 @@ async function showVisitNotes(
 ): Promise<void> {
   await say(ctx, convo, copy.visitNotes(evidence, convo.heardText));
   convo.stage = "ready_for_bill";
+  await reviewBill(ctx, convo);
 }
 
 /** True (and the notes are shown) once the Visit Agent has recorded the visit's evidence. */

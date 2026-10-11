@@ -12,9 +12,8 @@ import { CASE, setup } from "./support";
 
 async function toClaimPrompt(send: ReturnType<typeof setup>["send"]) {
   await send({ text: "hi" });
-  await send({ text: "fn_pat_demo_001" });
   await send({ kind: "button", buttonId: "CONSENT_YES" });
-  await send({ kind: "button", buttonId: "RECORD_SKIP" });
+  await send({ text: "fn_pat_demo_001" });
   await send({ kind: "button", buttonId: "REVIEW_BILL" });
 }
 
@@ -149,8 +148,16 @@ describe("HTTP webhook", () => {
       return createCase();
     };
     const hi = JSON.stringify({ id: "evt_hi", type: "message", from: "u1", text: "hi" });
+    const yes = JSON.stringify({
+      id: "evt_yes",
+      type: "button",
+      from: "u1",
+      button: { id: "CONSENT_YES" },
+    });
     const id = JSON.stringify({ id: "evt_id", type: "message", from: "u1", text: "fn_pat_demo_001" });
     expect((await post(hi)).json.status).toBe("accepted");
+    expect((await post(yes)).json.status).toBe("accepted");
+    await server.idle();
     expect((await post(id)).json.status).toBe("accepted"); // answered before Core is called
     await server.idle();
     expect(relay.outbox.at(-1)?.message.text).toMatch(/send that again/);

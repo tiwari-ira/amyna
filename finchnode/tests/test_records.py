@@ -43,6 +43,40 @@ def test_profile_uses_demographics_and_coverage() -> None:
     assert profile.payer_phone is None  # FinchNode coverage has no phone
 
 
+def test_a_procedure_code_becomes_one_line_at_the_claim_total() -> None:
+    body = {
+        "categories": ["claims"],
+        "data": {
+            "claims": {
+                "explanationsOfBenefit": [
+                    {
+                        "id": "rec_pump",
+                        "sourceRecordId": "ExplanationOfBenefit/rec_7448c25005976bed817b7126",
+                        "providerName": "Provider not listed",
+                        "servicePeriod": {"start": "2015-03-25", "end": "2015-04-18"},
+                        "providerBilled": {"amount": 19593.85, "currency": "USD"},
+                        "procedureCodes": [
+                            {"code": "Z000", "display": "Encounter for general adult medical examination"},
+                            {
+                                "code": "5A0211D",
+                                "display": "ASSIST WITH CARDIAC OUTPUT USING IMPELLER PUMP, INTERMITTENT",
+                            },
+                        ],
+                    }
+                ]
+            }
+        },
+    }
+    [claim] = records.claims(Snapshot.from_body("u_07950e432471154c", body))
+    assert claim.external_claim_id == "rec_7448c25005976bed817b7126"
+    assert claim.total_billed_cents == 1_959_385
+    assert len(claim.lines) == 1
+    line = claim.lines[0]
+    assert line.code.code == "5A0211D" and line.code.system == CodeSystem.LOCAL
+    assert line.billed_cents == 1_959_385
+    assert "IMPELLER PUMP" in line.description
+
+
 def test_claims_are_summaries_without_lines() -> None:
     [claim] = records.claims(BASELINE)
     assert claim.external_claim_id == "claim-demo-001"

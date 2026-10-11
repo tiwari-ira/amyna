@@ -12,50 +12,31 @@ const texts = (relay: ReturnType<typeof setup>["relay"]) => relay.outbox.map((m)
 const CASE_REF = { case_id: CASE, channel: "relay", finchnode_patient_id: "u_0123456789abcdef" };
 
 describe("FinchNode Connect", () => {
-  it("sends a Connect link instead of asking for an id, then continues when records arrive", async () => {
+  it("asks for consent before a patient id and does not open a new Connect link", async () => {
     const { core, relay, ctx, send } = setup();
     core.connectEnabled = true;
     await send({ text: "hi" });
     const card = relay.outbox.at(-1)!.message;
-    expect(card.text).toMatch(/connect your health records/i);
-    expect(card.buttons?.[0]).toMatchObject({ label: "Connect my health records", url: "https://finchnode.com/connect/cs_1" });
-    expect(ctx.store.get("patient")).toMatchObject({ stage: "awaiting_finchnode_connect", caseId: CASE, connectSessionId: "cs_1" });
+    expect(card.text).toMatch(/permission/);
+    expect(card.buttons?.map((b) => b.id)).toEqual(["CONSENT_YES", "CONSENT_NO"]);
+    expect(ctx.store.get("patient").stage).toBe("awaiting_data_consent");
+    expect(core.connectCalls).toBe(0);
 
-    await send({ kind: "button", buttonId: "CONNECT_DONE" }); // not finished yet
-    expect(texts(relay).at(-1)).toMatch(/don't see your records yet/);
-
-    // FinchNode -> Core consent.granted -> Core push
-    core.note("status_update", "Your health records are connected.", { data: { event: "finchnode_connected" } });
-    await onCoreNotify(ctx, { notification: core.notes.at(-1)!, case: CASE_REF });
-    expect(texts(relay)).toContain("Your health records are connected.");
-    expect(ctx.store.get("patient").recordsLinked).toBe(true);
-    expect(ctx.store.get("patient").stage).toBe("awaiting_recording_choice");
-    expect(core.connectCalls).toBe(1);
-  });
-
-  it("finishes linking by reading the session back when no webhook came", async () => {
-    const { core, relay, ctx, send } = setup();
-    core.connectEnabled = true;
-    await send({ text: "hi" });
-    core.connectStatus = "completed";
-    await send({ kind: "button", buttonId: "CONNECT_DONE" });
-    expect(texts(relay).filter((t) => t === "Your health records are connected.")).toHaveLength(1);
-    expect(ctx.store.get("patient").stage).toBe("awaiting_recording_choice");
-  });
-
-  it("falls back to typed ids when Core links by id (mock/demo)", async () => {
-    const { relay, ctx, send } = setup();
-    await send({ text: "hi" });
-    expect(ctx.store.get("patient").stage).toBe("awaiting_patient_id");
-    expect(relay.outbox.at(-1)!.message.buttons).toBeUndefined();
+    await send({ kind: "button", buttonId: "CONSENT_YES" });
+    expect(ctx.store.get("patient").stage).toBe("awaiting_account_memo");
+    await send({ text: "patient-demo-001" });
+    expect(ctx.store.get("patient")).toMatchObject({
+      stage: "ready_for_bill",
+      finchnodePatientId: "patient-demo-001",
+      healthConsentGiven: true,
+    });
   });
 });
 
 async function toBillReview(send: ReturnType<typeof setup>["send"]) {
   await send({ text: "hi" });
-  await send({ text: "patient-demo-001" }); // FinchNode demo ids are accepted
   await send({ kind: "button", buttonId: "CONSENT_YES" });
-  await send({ kind: "button", buttonId: "RECORD_SKIP" });
+  await send({ text: "patient-demo-001" }); // FinchNode demo ids are accepted
 }
 
 describe("picking a FinchNode bill", () => {
@@ -113,7 +94,7 @@ describe("consent before the insurer call", () => {
     await tap(":NO");
     await tap(":APPROVE");
     expect(texts(relay).at(-1)).toMatch(/call your insurance company/);
-    expect(texts(relay).at(-1)).toMatch(/224 number already on file/);
+    expect(texts(relay).at(-1)).toMatch(/phone number already on file/);
     expect(core.state).toBe("AWAITING_APPROVAL");
     await tap("CALL_INSURER");
     expect(core.events.at(-1)).toMatchObject({ dispute_id: "dsp_1", choice: "APPROVE" });

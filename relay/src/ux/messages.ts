@@ -73,7 +73,13 @@ export const DATA_CONSENT_TEXT =
   "I allow Amyna to read my FinchNode health records (encounters, procedures, " +
   "medications and claims) to review this bill.";
 export const RECORDING_CONSENT_TEXT =
-  "I agree that Amyna may record and transcribe this appointment for my bill review.";
+  "I agree that Amyna may record and transcribe this visit for my bill review. " +
+  "My doctor and the provider agree to that recording too.";
+
+/** Said once, out loud, before any records are opened. Played back only as their own words. */
+export const ACCOUNT_CONSENT_MEMO =
+  "Hi, this is [your name]. I give full consent for my assistant to handle this medical bill for me, " +
+  "and to bring me into the call whenever something only I can answer is needed.";
 
 /** The extractor marks ruled-out services as "NOT anesthesia"; patients read "no anesthesia". */
 function describeEvidence(item: { description: string; negated?: boolean }): string {
@@ -106,7 +112,7 @@ export const copy = {
     "Looks like you're at a hospital. Connect your health records first, then I'll start the recording.",
   askClaimNumber: "Which bill? Send the claim number printed on it (for example CLM-2026-0915-001).",
   pickBill: (bills: FinchNodeClaimSummary[]): OutboundMessage => ({
-    text: "Which bill should I check? These are the bills on your health records. You can also send a claim number.",
+    text: "Your claim is already on your records. Which bill should I check? You can also send a claim number.",
     buttons: bills.map((bill) => ({ id: `bill:${bill.external_claim_id}`, label: billLabel(bill) })),
   }),
   billNotItemized: (detail: Record<string, unknown>): OutboundMessage => ({
@@ -123,7 +129,7 @@ export const copy = {
     "records, or send the claim number printed on it.",
   askInsurerCall: (): OutboundMessage => ({
     text:
-      "Should I call your insurance company now? I'll use the 224 number already on file. " +
+      "Should I call your insurance company now? I'll use the phone number already on file. " +
       "You don't start the call. I do, after you say yes.",
     buttons: [BUTTONS.callInsurer, BUTTONS.callLater],
   }),
@@ -140,15 +146,27 @@ export const copy = {
   // Shown only when the flow truly needs the patient ID (demo/sandbox identity).
   // Explained in plain English; the patient never has to know terms in advance.
   idGuidance:
-    "When you're ready, paste your patient ID (the code starting with fn_pat_ or u_ on " +
-    "your records paperwork) and I'll link your health records. If you don't know " +
-    "it, just tell me what the bill says and I'll help you find it.",
+    "Paste your patient ID (it starts with u_ or fn_pat_) and I'll link the records you already shared.",
+  accountMemo: (): OutboundMessage => ({
+    text:
+      "Before I open anything, record a short voice memo (hold the mic in this chat) and say:\n\n" +
+      `"${ACCOUNT_CONSENT_MEMO}"\n\n` +
+      "That is your authorization for me to handle this bill and to call you in if the insurer asks for " +
+      "something only you can answer, like a Social Security number. Send the memo here, or paste your " +
+      "patient ID if you want to skip the recording.",
+    buttons: [BUTTONS.recordSkip],
+  }),
   locationAsk:
     "Share your location in this chat (Once is fine, or keep sharing while you're at the appointment) " +
     "and I'll ping you if it looks like you're at a hospital so you can record the visit. " +
     'You can also send "I\'m at the hospital".',
+  locationAlreadySharing:
+    "I can't send a new location button while an older share is still on. " +
+    "Stop the location share in this chat, and I'll ask you to share it again right away.",
   nearHospital: (name: string): OutboundMessage => ({
-    text: `Looks like you're at ${name}. Want to start recording this visit so I can check the bill later?`,
+    text:
+      `Looks like you're at ${name}. If you're at a hospital, do you want to record this visit?\n\n` +
+      `"${RECORDING_CONSENT_TEXT}"`,
     buttons: [BUTTONS.recordYes, BUTTONS.recordSkip],
   }),
   notNearHospital:
@@ -193,7 +211,7 @@ export const copy = {
       (evidence.length
         ? `Here's what I noted from your visit: ${listItems(evidence.map(describeEvidence))}.`
         : "I went through your visit but didn't hear any procedures, tests or medications to check your bill against.") +
-      "\n\nWhen your bill arrives, tap Review my bill and I'll compare it with your visit.",
+      "\n\nGive me a moment. I'm checking whether this bill is already on your records.",
     buttons: [BUTTONS.reviewBill],
   }),
   readyForBill: (): OutboundMessage => ({

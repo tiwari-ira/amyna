@@ -364,6 +364,31 @@ class _Analysis:
 
     # -- rules --------------------------------------------------------------------
 
+    def unknown(self, line: ClaimLine) -> None:
+        """A billed code that is not in the reference table still gets a question.
+
+        The wording comes from the line the payer sent. It is not assumed to be wrong.
+        """
+        self.assess(line, LineMatchStatus.UNKNOWN, None, [], note="code not in reference table")
+        label = line.description.strip() or f"{line.code.system.value} {line.code.code}"
+        self.flag(
+            line,
+            issue=IssueType.UNSUPPORTED_CHARGE,
+            title=f"{label} is not in the code table",
+            explanation=(
+                f"Line {line.line_number} bills {line.code.system.value} {line.code.code} "
+                f"({label}) for {money(line.billed_cents)}. That code is not in the reference "
+                "table, so it was not matched to the visit."
+            ),
+            confidence=0.7,
+            action=DisputeAction.REMOVE_CHARGE,
+            refs=[self.billed_ref(line)],
+            question=(
+                f"Did you receive {label} during your visit on "
+                f"{spoken_date(line.date_of_service)}?"
+            ),
+        )
+
     def duplicate(self, line: ClaimLine, first: ClaimLine, entry: CodeEntry | None) -> None:
         self.assess(line, LineMatchStatus.DUPLICATE, entry, [self.billed_ref(first)])
         self.flag(
@@ -541,9 +566,7 @@ class _Analysis:
                 continue
             first_seen[key] = line
             if entry is None:
-                self.assess(
-                    line, LineMatchStatus.UNKNOWN, None, [], note="code not in reference table"
-                )
+                self.unknown(line)
                 continue
             if entry.category == "facility":
                 self.facility(line, entry)

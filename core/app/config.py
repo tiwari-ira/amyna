@@ -166,15 +166,37 @@ class Settings(BaseSettings):
     def connect_categories(self) -> list[str]:
         return [c.strip() for c in self.finchnode_connect_categories.split(",") if c.strip()]
 
+    def payer_directory(self) -> list[tuple[str, str]]:
+        """``PAYER_PHONES`` as (payer name, E.164) pairs. Names are not hard-coded."""
+        entries: list[tuple[str, str]] = []
+        for entry in self.payer_phones.replace("\n", ";").split(";"):
+            name, sep, phone = entry.rpartition("=")
+            if sep and name.strip() and phone.strip():
+                entries.append((name.strip(), phone.strip()))
+        return entries
+
     def payer_phone_for(self, payer_name: str | None) -> str | None:
-        """PAYER_PHONES lookup by payer name (case-insensitive), or None."""
-        if not payer_name:
+        """Phone for a payer name, from ``PAYER_PHONES``.
+
+        Exact name, then a name contained in the other, then the only number in
+        the directory. FinchNode coverage has no phone, so a deployment with one
+        line (the number it is allowed to dial) can call whatever payer the
+        records name. Nothing here is tied to one claim or one insurer.
+        """
+        entries = self.payer_directory()
+        if not entries or not payer_name:
             return None
         wanted = payer_name.strip().lower()
-        for entry in self.payer_phones.replace("\n", ";").split(";"):
-            name, _, phone = entry.rpartition("=")
-            if name.strip().lower() == wanted and phone.strip():
-                return phone.strip()
+        for name, phone in entries:
+            if name.lower() == wanted:
+                return phone
+        for name, phone in entries:
+            key = name.lower()
+            if len(key) >= 4 and len(wanted) >= 4 and (key in wanted or wanted in key):
+                return phone
+        phones = {phone for _, phone in entries}
+        if len(phones) == 1:
+            return next(iter(phones))
         return None
 
     def telnyx_fallback_profiles(self) -> tuple[tuple[str, str, str], ...]:

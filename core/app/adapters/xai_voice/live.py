@@ -51,6 +51,7 @@ class _LiveCall:
     commands: asyncio.Queue[str] | None = None
     loop: asyncio.AbstractEventLoop | None = None
     paused: bool = False
+    greeted: bool = False
     thread: threading.Thread | None = None
     pending_commands: list[str] = field(default_factory=list)
 
@@ -132,6 +133,7 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
                 self._endpoint(call.config), additional_headers=headers
             ) as ws:
                 await ws.send(json.dumps(self.session_update(call.config)))
+                await self._greet(ws, call)
                 commands = asyncio.create_task(self._consume_commands(ws, call))
                 try:
                     async for raw in ws:
@@ -149,7 +151,9 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
     ) -> None:
         call_id = call.config.call_id
         event_type = event.get("type")
-        if event_type == EVT_INPUT_TRANSCRIPT_DONE:
+        if event_type == EVT_SESSION_UPDATED:
+            await self._greet(ws, call)
+        elif event_type == EVT_INPUT_TRANSCRIPT_DONE:
             decision = handler.on_insurer_utterance(call_id, event.get("transcript", ""))
             if decision.action == TurnAction.PAUSE_FOR_HUMAN:
                 await self._hold(ws, call, decision.say or HOLD_LINE)
@@ -185,6 +189,27 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
                 await self._say(ws, verdict.text, interrupt=True)
         elif event_type == EVT_ERROR:
             log.error("xAI realtime error", extra={"fields": {"call_id": call_id, "event": event}})
+
+    async def _greet(self, ws: Any, call: _LiveCall) -> None:
+        """Speak as soon as the call is connected. Do not wait for the other person."""
+        if call.greeted or call.paused:
+            return
+        call.greeted = True
+        await ws.send(
+            json.dumps(
+                {
+                    "type": "response.create",
+                    "response": {
+                        "instructions": (
+                            "The call just connected. Speak first, before they say anything. "
+                            "Introduce yourself as Amyna, an automated assistant calling about "
+                            "a medical bill the member authorized you to discuss. Then ask who "
+                            "you are speaking with. One short turn."
+                        )
+                    },
+                }
+            )
+        )
 
     async def _say(self, ws: Any, text: str, *, interrupt: bool) -> None:
         """Make the agent say an exact line. VERIFY the recommended pattern."""

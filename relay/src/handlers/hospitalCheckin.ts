@@ -9,7 +9,8 @@ import { type HandlerContext, say, serialize } from "./context";
 
 const HOSPITAL_PROMPT_COOLDOWN_MS = 2 * 60 * 60 * 1000;
 const LIVE_POLL_MS = 2 * 60 * 1000;
-const AT_HOSPITAL = /^(i['’]?m\s+)?at\s+(the\s+)?(hospital|clinic|er|urgent care)\b/i;
+const AT_HOSPITAL =
+  /\b(?:i['’]?m\s+)?at\s+(?:(?:a|the)\s+)?(hospital|clinic|er|urgent care)\b/i;
 
 const liveWatches = new Map<string, ReturnType<typeof setInterval>>();
 
@@ -28,6 +29,15 @@ export function isAtHospitalText(text: string | undefined): boolean {
   return Boolean(text?.trim() && AT_HOSPITAL.test(text.trim()));
 }
 
+const REPROMPT_LOCATION = new Set([
+  "new",
+  "awaiting_patient_id",
+  "awaiting_account_memo",
+  "awaiting_data_consent",
+  "awaiting_recording_choice",
+  "ready_for_bill",
+]);
+
 export async function askForLocation(ctx: HandlerContext, convo: Conversation): Promise<void> {
   if (convo.locationAsked) return;
   convo.locationAsked = true;
@@ -38,6 +48,7 @@ export async function askForLocation(ctx: HandlerContext, convo: Conversation): 
     if (result === "already_sharing") {
       convo.locationSharing = true;
       watchLiveLocation(ctx, convo.userId);
+      await say(ctx, convo, copy.locationAlreadySharing);
       await checkCoordinates(ctx, convo, await ctx.relay.readLocation(convo.chatId), false);
     }
   } catch (error) {
@@ -58,6 +69,11 @@ export async function handleLocationEvent(
   if (event.locationShare === "ended") {
     convo.locationSharing = false;
     stopLiveWatch(convo.userId);
+    // Relay will not show the share button again until the old share is stopped.
+    if (!convo.visitId && REPROMPT_LOCATION.has(convo.stage)) {
+      convo.locationAsked = false;
+      await askForLocation(ctx, convo);
+    }
     return true;
   }
   if (event.locationShare === "live") {
@@ -153,6 +169,11 @@ async function checkCoordinates(
 
 async function promptHospital(ctx: HandlerContext, convo: Conversation, name: string): Promise<void> {
   if (BUSY.has(convo.stage) || convo.stage === "awaiting_recording_choice" || convo.visitId) return;
+  if (!convo.healthConsentGiven && !convo.recordsLinked) {
+    convo.wantRecording = true;
+    await askDataConsent(ctx, convo);
+    return;
+  }
   const now = Date.now();
   if (
     convo.lastHospitalName === name &&
