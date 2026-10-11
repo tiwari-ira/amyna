@@ -23,6 +23,8 @@ export const BUTTONS = {
   cancel: { id: "CANCEL", label: "Cancel call" },
   connectDone: { id: "CONNECT_DONE", label: "I'm done connecting" },
   skipPhone: { id: "SKIP_PHONE", label: "Don't call me" },
+  callInsurer: { id: "CALL_INSURER", label: "Call them" },
+  callLater: { id: "CALL_LATER", label: "Not now" },
 } as const satisfies Record<string, Button>;
 
 /** Plain-language versions of Core error codes the patient can act on. */
@@ -119,6 +121,13 @@ export const copy = {
   billPhotoUnsupported:
     "Thanks! I can't read bill photos or PDFs yet. Tap Review my bill to pick the bill from your health " +
     "records, or send the claim number printed on it.",
+  askInsurerCall: (): OutboundMessage => ({
+    text:
+      "Should I call your insurance company now? I'll use the 224 number already on file. " +
+      "You don't start the call. I do, after you say yes.",
+    buttons: [BUTTONS.callInsurer, BUTTONS.callLater],
+  }),
+  insurerCallDeclined: "Okay. I won't call your insurance company. Send \"restart\" if you want to go through the bill again.",
   askCallbackPhone: (): OutboundMessage => ({
     text:
       "Before I call your insurer: if they ask for something only you can give (like your SSN), " +

@@ -11,6 +11,7 @@ import {
 } from "./appointmentRecording";
 import {
   answerOpenPrompt,
+  answerInsurerCall,
   captureCallbackPhone,
   captureClaimId,
   replyToNotification,
@@ -162,6 +163,8 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
       return await say(ctx, convo, copy.readyForBill());
     case "awaiting_claim_id":
       return await captureClaimId(ctx, convo, event.text, choice);
+    case "awaiting_insurer_call":
+      return await answerInsurerCall(ctx, convo, choice);
     case "awaiting_callback_phone":
       return await captureCallbackPhone(ctx, convo, event.text, choice);
     case "in_review":

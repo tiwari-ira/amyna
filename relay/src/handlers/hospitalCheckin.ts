@@ -21,6 +21,7 @@ const BUSY = new Set([
   "awaiting_data_consent",
   "awaiting_finchnode_connect",
   "awaiting_callback_phone",
+  "awaiting_insurer_call",
 ]);
 
 export function isAtHospitalText(text: string | undefined): boolean {
