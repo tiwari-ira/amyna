@@ -76,6 +76,22 @@ def test_live_modes_fail_fast_naming_the_variable(overrides: dict, missing: str)
         settings.validate_for_startup()
 
 
+def test_one_configured_line_is_used_when_the_payer_name_differs() -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="test",
+        payer_phones="Example Health Plan (Synthetic)=+12243784400",
+    )
+    assert settings.payer_phone_for("Medicare") == "+12243784400"
+    assert settings.payer_phone_for("Example Health Plan (Synthetic)") == "+12243784400"
+    two = Settings(
+        _env_file=None,
+        app_env="test",
+        payer_phones="Blue Plan=+15555550100;Red Plan=+15555550101",
+    )
+    assert two.payer_phone_for("Medicare") is None
+
+
 def test_dev_fallback_tokens_only_outside_prod() -> None:
     assert all(_settings().service_tokens().values())
     prod = Settings(_env_file=None, app_env="prod")  # type: ignore[arg-type]

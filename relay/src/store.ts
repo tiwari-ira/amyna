@@ -7,6 +7,7 @@ export type Stage =
   | "awaiting_patient_id"
   | "awaiting_finchnode_connect"
   | "awaiting_data_consent"
+  | "awaiting_account_memo"
   | "awaiting_recording_choice"
   | "recording"
   | "processing_visit"
@@ -36,6 +37,10 @@ export interface Conversation {
   claimId?: string;
   reportSent?: boolean;
   chatId?: string;
+  /** Set once they agree to health-record access, before a case exists to store it on. */
+  healthConsentGiven?: boolean;
+  /** Signed URL of the account-authorization voice memo. Never log it. */
+  accountConsentAudioUrl?: string;
   locationAsked?: boolean;
   locationSharing?: boolean;
   wantRecording?: boolean;

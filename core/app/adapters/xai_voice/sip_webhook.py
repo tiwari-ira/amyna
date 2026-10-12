@@ -37,6 +37,35 @@ class IncomingSipCall(NamedTuple):
     sip_headers: dict[str, str]
 
 
+def _hmac_keys(secret: str) -> list[bytes]:
+    """Keys Standard Webhooks and a raw secret string can both verify.
+
+    xAI returns ``whsec_`` plus base64. The HMAC key is those decoded bytes.
+    A raw secret (used by older tests) is tried as well.
+    """
+    keys = [secret.encode()]
+    raw = secret.removeprefix("whsec_").strip()
+    padded = raw + "=" * (-len(raw) % 4)
+    try:
+        decoded = base64.b64decode(padded, validate=False)
+    except ValueError:
+        decoded = b""
+    if decoded and decoded not in keys:
+        keys.append(decoded)
+    return keys
+
+
+def _presented_signatures(header: str) -> list[str]:
+    """Each ``v1,<base64>`` candidate. The header may carry several, space-separated."""
+    found: list[str] = []
+    for part in header.split():
+        if part.startswith("v1,"):
+            found.append(part.removeprefix("v1,"))
+        elif "," in part:
+            found.append(part.split(",", 1)[1])
+    return found
+
+
 def verify_xai_signature(
     secret: str,
     body: bytes,
@@ -64,13 +93,13 @@ def verify_xai_signature(
         raise XaiWebhookError(
             "webhook timestamp outside the replay window", code="invalid_signature"
         )
-    signed = f"{webhook_id}.{timestamp}.{body.decode('utf-8', errors='replace')}"
-    expected = base64.b64encode(
-        hmac.new(secret.encode(), signed.encode(), hashlib.sha256).digest()
-    ).decode()
-    presented = signature.removeprefix("v1,").strip()
-    if not hmac.compare_digest(expected, presented):
-        raise XaiWebhookError("webhook signature mismatch", code="invalid_signature")
+    signed = webhook_id.encode() + b"." + timestamp.encode() + b"." + body
+    candidates = _presented_signatures(signature)
+    for key in _hmac_keys(secret):
+        expected = base64.b64encode(hmac.new(key, signed, hashlib.sha256).digest()).decode()
+        if any(hmac.compare_digest(expected, candidate) for candidate in candidates):
+            return
+    raise XaiWebhookError("webhook signature mismatch", code="invalid_signature")
 
 
 def parse_incoming_call(body: bytes) -> IncomingSipCall:

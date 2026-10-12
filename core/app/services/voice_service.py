@@ -16,6 +16,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from claimshield_contracts.api import VoiceEventIn, VoiceEventResult
@@ -234,6 +235,21 @@ class VoiceCallManager:
             self._end(call_id, f"voice session failed: {type(exc).__name__}", failed=True)
             raise UpstreamError("The voice session could not be started.") from exc
         return self.get_call(call_id)
+
+    def open_unbridged_call_id(self) -> str | None:
+        """The one live call that has not attached to xAI yet, if there is exactly one."""
+        with self._c.session_scope() as db:
+            rows = list(
+                db.scalars(
+                    select(CallRow).where(
+                        CallRow.status == CallStatus.IN_PROGRESS.value,
+                        CallRow.xai_call_ref.is_(None),
+                    )
+                )
+            )
+        if len(rows) == 1:
+            return rows[0].id
+        return None
 
     def attach_sip_session(self, call_id: str, xai_call_id: str, *, actor: str) -> CallSession:
         """SIP attach (task 15): start the realtime WS for the bridged insurer call.
@@ -552,8 +568,6 @@ class VoiceCallManager:
         """
         count = 0
         with self._c.session_scope() as db:
-            from sqlalchemy import select
-
             stmt = (
                 select(CallRow)
                 .where(CallRow.status == CallStatus.PAUSED_FOR_HUMAN.value)
@@ -605,13 +619,21 @@ class VoiceCallManager:
             call.end_reason = reason
             for row in open_call_interventions(db, call_id):
                 row.status = InterventionStatus.CANCELLED.value
-            resolved = bool(call.insurer_response) and not failed
+            cancelled = "cancelled by patient" in reason
+            resolved = bool(call.insurer_response) and not failed and not cancelled
             call.status = (CallStatus.COMPLETED if resolved else CallStatus.FAILED).value
-            if dispute is not None:
+            if dispute is not None and (resolved or cancelled):
                 dispute.status = (
                     DisputeStatus.RESOLVED if resolved else DisputeStatus.FAILED
                 ).value
-            target = CaseState.RESOLVED if resolved else CaseState.FAILED
+            # A dropped or unanswered line stays approved so the patient can dial again.
+            # Only a recorded insurer result or an explicit cancel closes the dispute.
+            if resolved:
+                target = CaseState.RESOLVED
+            elif cancelled:
+                target = CaseState.FAILED
+            else:
+                target = CaseState.APPROVED
             transition(db, case, target, actor="core:voice", reason=reason)
             record_audit(
                 db,
@@ -622,8 +644,20 @@ class VoiceCallManager:
                 details={"reason": reason, "status": call.status},
             )
             notification_service.notify_status(
-                db, self._c, case, _final_message(case, call), final=True
+                db,
+                self._c,
+                case,
+                _final_message(case, call) if resolved or cancelled else _retry_message(case),
+                final=resolved or cancelled,
             )
+
+
+def _retry_message(case: CaseRow) -> str:
+    payer = case.payer_name or "your insurer"
+    return (
+        f"The call with {payer} didn't connect, so there was nobody to talk to. "
+        'Text "call" and I will dial again.'
+    )
 
 
 def _final_message(case: CaseRow, call: CallRow) -> str:

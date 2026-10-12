@@ -1,25 +1,26 @@
 /** Entry point for every patient event from the Relay platform. */
 import { CoreError } from "../coreClient";
 import type { Conversation } from "../store";
-import { BUTTONS, copy } from "../ux/messages";
+import { BUTTONS, DATA_CONSENT_TEXT, copy } from "../ux/messages";
 import type { InboundEvent } from "../webhook";
 import {
   answerRecordingChoice,
   awaitVoiceMemo,
   checkVisitEvidence,
+  offerRecording,
   onRecordingCompleted,
 } from "./appointmentRecording";
 import {
   answerOpenPrompt,
   answerInsurerCall,
+  redialInsurer,
   captureCallbackPhone,
   captureClaimId,
   replyToNotification,
   reviewBill,
 } from "./approvalFlow";
-import { checkConnect, startConnect } from "./connect";
 import { answerDataConsent, askDataConsent } from "./consent";
-import { type HandlerContext, patientScope, say, serialize } from "./context";
+import { type HandlerContext, patientScope, requireCase, say, serialize } from "./context";
 import {
   askForLocation,
   flushPendingPlace,
@@ -42,6 +43,7 @@ const TEXT_CHOICES: Record<string, string> = {
   review: "REVIEW",
   done: "DONE",
   cancel: "CANCEL",
+  call: "CALL_INSURER",
 };
 
 export function normalizeText(text: string | undefined): string | undefined {
@@ -51,9 +53,8 @@ export function normalizeText(text: string | undefined): string | undefined {
 
 async function start(ctx: HandlerContext, convo: Conversation): Promise<void> {
   await say(ctx, convo, copy.welcome);
-  // Production links records through FinchNode Connect; mock/demo fall back to a typed id.
-  if (await startConnect(ctx, convo)) return;
-  convo.stage = "awaiting_patient_id";
+  // Consent comes before a patient ID, a location, or a recording.
+  await askDataConsent(ctx, convo);
 }
 
 async function capturePatientId(
@@ -82,8 +83,20 @@ async function capturePatientId(
     convo.finchnodePatientId = patientId;
     convo.caseId = created.case_id;
   }
+  if (convo.healthConsentGiven) {
+    await ctx.core.recordConsent(requireCase(convo), {
+      consent_type: "health_data_access",
+      consent_text: DATA_CONSENT_TEXT,
+      channel: "relay",
+    });
+  }
   await askForLocation(ctx, convo);
-  await askDataConsent(ctx, convo);
+  if (convo.wantRecording) {
+    convo.wantRecording = false;
+    await offerRecording(ctx, convo);
+    return;
+  }
+  convo.stage = "ready_for_bill";
 }
 
 /** One patient event; serialized per patient. Core errors the patient can act on (and every
@@ -120,6 +133,18 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
     return;
   }
   if (event.audio) {
+    if (convo.stage === "awaiting_account_memo") {
+      convo.accountConsentAudioUrl = event.audio.url;
+      ctx.log(`account authorization memo received (${event.audio.mimeType})`);
+      await say(
+        ctx,
+        convo,
+        "Got it. I'll use that recording as your authorization, and I'll call you in if the insurer needs you.",
+      );
+      convo.stage = "awaiting_patient_id";
+      await say(ctx, convo, copy.idGuidance);
+      return;
+    }
     if (convo.stage !== "recording") return await say(ctx, convo, copy.audioNotExpected);
     ctx.log(`voice memo received (${event.audio.mimeType}, ${event.audio.sizeBytes ?? "?"} bytes)`);
     return await onRecordingCompleted(ctx, convo, event.audio.url, event.audio.mimeType);
@@ -140,7 +165,28 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
     case "awaiting_finchnode_connect":
       return await checkConnect(ctx, convo);
     case "awaiting_data_consent":
+      if (!choice && event.text?.trim()) {
+        const understood = await ctx.core.understandMessage(event.text.trim());
+        await say(ctx, convo, `${understood.reply}\n\n${copy.dataConsent().text}`);
+        return;
+      }
       return await answerDataConsent(ctx, convo, choice);
+    case "awaiting_account_memo":
+      if (choice === BUTTONS.recordSkip.id || choice === "NO") {
+        convo.stage = "awaiting_patient_id";
+        await say(ctx, convo, copy.idGuidance);
+        return;
+      }
+      if (event.text && PATIENT_ID.test(event.text)) {
+        return await capturePatientId(ctx, convo, event.text);
+      }
+      if (event.text?.trim()) {
+        const understood = await ctx.core.understandMessage(event.text.trim());
+        await say(ctx, convo, `${understood.reply}\n\n${copy.accountMemo().text}`);
+        return;
+      }
+      await say(ctx, convo, copy.accountMemo());
+      return;
     case "awaiting_recording_choice":
       if ((choice === BUTTONS.recordYes.id || choice === "YES") && !convo.caseId) {
         return await startRecordingFromHospital(ctx, convo);
@@ -168,8 +214,13 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
     case "awaiting_callback_phone":
       return await captureCallbackPhone(ctx, convo, event.text, choice);
     case "in_review":
+      if (choice === BUTTONS.callInsurer.id) {
+        if (await redialInsurer(ctx, convo)) return;
+        return await say(ctx, convo, copy.notUnderstood);
+      }
       return await answerOpenPrompt(ctx, convo, choice, event.id);
     case "done":
+      if (choice === BUTTONS.callInsurer.id && (await redialInsurer(ctx, convo))) return;
       return await say(ctx, convo, copy.restart);
   }
 }

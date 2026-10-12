@@ -26,7 +26,7 @@ TRANSITIONS: dict[S, frozenset[S]] = {
     S.DISPUTE_PREPARED: frozenset({S.AWAITING_APPROVAL}),
     S.AWAITING_APPROVAL: frozenset({S.APPROVED, S.REJECTED}),
     S.APPROVED: frozenset({S.CALL_IN_PROGRESS, S.RESOLVED}),
-    S.CALL_IN_PROGRESS: frozenset({S.HUMAN_REQUIRED, S.RESOLVED}),
+    S.CALL_IN_PROGRESS: frozenset({S.HUMAN_REQUIRED, S.RESOLVED, S.APPROVED}),
     S.HUMAN_REQUIRED: frozenset({S.CALL_IN_PROGRESS, S.RESOLVED}),
     S.RESOLVED: frozenset(),
     S.REJECTED: frozenset(),
@@ -155,6 +155,7 @@ GUARDS: dict[tuple[S, S], Guard] = {
     ),
     (S.HUMAN_REQUIRED, S.CALL_IN_PROGRESS): _call_resumable,
     (S.CALL_IN_PROGRESS, S.RESOLVED): _has_insurer_response,
+    (S.CALL_IN_PROGRESS, S.APPROVED): _call_authorized,
     (S.HUMAN_REQUIRED, S.RESOLVED): _has_insurer_response,
 }
 

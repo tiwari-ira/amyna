@@ -182,7 +182,12 @@ def test_price_above_published_gross(resolver: CodeResolver) -> None:
     assert not finding.human_confirmation_required
 
 
-def test_unknown_codes_are_assessed_not_flagged(resolver: CodeResolver) -> None:
+def test_unknown_codes_are_asked_not_assumed(resolver: CodeResolver) -> None:
     result = analyze_claim(_claim(_line("99999", CodeSystem.CPT, 100)), [], [], resolver=resolver)
-    assert result.findings == []
     assert result.line_assessments[0].status == LineMatchStatus.UNKNOWN
+    [finding] = result.findings
+    assert finding.human_confirmation_required
+    assert finding.confirmation is not None
+    assert finding.confirmation.question == (
+        "Did you receive 99999 during your visit on September 15, 2026?"
+    )

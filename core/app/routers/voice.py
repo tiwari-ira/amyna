@@ -71,14 +71,17 @@ async def xai_incoming_call_webhook(
         )
         incoming = await run_in_threadpool(sip_webhook.parse_incoming_call, body)
     except XaiWebhookError as exc:
+        log.warning("xAI inbound call rejected: %s", exc.message)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "invalid_signature", "message": str(exc)},
         ) from exc
 
-    core_call_id = incoming.sip_headers.get(CALL_ID_SIP_HEADER)
+    core_call_id = _header(incoming.sip_headers, CALL_ID_SIP_HEADER)
     if not core_call_id:
-        # xAI treats a 200 as handled; without our correlation header we cannot attach.
+        core_call_id = container.voice_manager.open_unbridged_call_id()
+    if not core_call_id:
+        # xAI treats a 200 as handled; without a call to attach we cannot speak.
         log.warning("xAI inbound call without correlation header")
         return {"received": False}
     await run_in_threadpool(
@@ -88,6 +91,15 @@ async def xai_incoming_call_webhook(
         actor="service:telnyx",
     )
     return {"received": True}
+
+
+def _header(headers: dict[str, str], name: str) -> str | None:
+    """SIP header lookup. Carriers do not agree on the letter case."""
+    wanted = name.lower()
+    for key, value in headers.items():
+        if key.lower() == wanted and value:
+            return value
+    return None
 
 
 @router.post("/start", response_model=CallSession, status_code=status.HTTP_201_CREATED)

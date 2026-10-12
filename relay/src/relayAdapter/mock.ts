@@ -12,6 +12,8 @@ export class MockRelayAdapter implements RelayAdapter {
   readonly locationRequests: string[] = [];
   /** Test hook: coordinates returned by readLocation. */
   sharedLocation: SharedLocation | undefined;
+  /** Test hook: what the location request API returns. */
+  locationResult: "sent" | "already_sharing" | "unavailable" = "sent";
   private counter = 0;
 
   constructor(
@@ -40,7 +42,7 @@ export class MockRelayAdapter implements RelayAdapter {
 
   async requestLocation(chatId: string): Promise<"sent" | "already_sharing" | "unavailable"> {
     this.locationRequests.push(chatId);
-    return "sent";
+    return this.locationResult;
   }
 
   async readLocation(): Promise<SharedLocation | undefined> {

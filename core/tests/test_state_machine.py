@@ -101,6 +101,12 @@ def test_resolved_without_findings_only() -> None:
     check_transition(S.ANALYZED, S.RESOLVED, GuardContext(findings_count=0))
 
 
+def test_an_unfinished_call_can_return_to_approved() -> None:
+    check_transition(S.CALL_IN_PROGRESS, S.APPROVED, APPROVED_CTX)
+    with pytest.raises(GuardFailed):
+        check_transition(S.CALL_IN_PROGRESS, S.APPROVED, GuardContext())
+
+
 def test_resolution_requires_insurer_response() -> None:
     with pytest.raises(GuardFailed):
         check_transition(S.CALL_IN_PROGRESS, S.RESOLVED, GuardContext())
