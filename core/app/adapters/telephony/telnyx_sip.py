@@ -67,21 +67,37 @@ def from_client_state(client_state: str | None) -> str | None:
 
 
 HUMAN_LEG_MARK = ":human"
+AI_LEG_MARK = ":ai"
+LEG_INSURER, LEG_HUMAN, LEG_AI = "insurer", "human", "ai"
 
 
 def human_client_state(call_id: str) -> str:
-    """client_state for the handoff leg that dials the human's phone."""
+    """client_state for the handoff leg that dials the patient's phone."""
     return base64.b64encode(f"{call_id}{HUMAN_LEG_MARK}".encode()).decode()
+
+
+def ai_client_state(call_id: str) -> str:
+    """client_state for the outbound leg that carries the AI (xAI SIP endpoint)."""
+    return base64.b64encode(f"{call_id}{AI_LEG_MARK}".encode()).decode()
+
+
+def parse_client_state(client_state: str | None) -> tuple[str | None, str]:
+    """(call_id, leg) where leg is insurer | human | ai; call_id None when malformed."""
+    decoded = from_client_state(client_state)
+    if decoded is None:
+        return None, LEG_INSURER
+    for mark, leg in ((HUMAN_LEG_MARK, LEG_HUMAN), (AI_LEG_MARK, LEG_AI)):
+        if decoded.endswith(mark):
+            return decoded[: -len(mark)], leg
+    return decoded, LEG_INSURER
 
 
 def split_client_state(client_state: str | None) -> tuple[str | None, bool]:
     """(call_id, is_human_leg); (None, False) when the client_state is malformed."""
-    decoded = from_client_state(client_state)
-    if decoded is None:
+    call_id, leg = parse_client_state(client_state)
+    if call_id is None:
         return None, False
-    if decoded.endswith(HUMAN_LEG_MARK):
-        return decoded[: -len(HUMAN_LEG_MARK)], True
-    return decoded, False
+    return call_id, leg == LEG_HUMAN
 
 
 class _ProfileExhausted(UpstreamError):
@@ -102,6 +118,9 @@ class TelnyxSipTelephony(TelephonyAdapter):
     """Telnyx Call Control: places/ends the PSTN leg; the webhook route bridges."""
 
     mode = "live"
+    # A third person can only join through a Telnyx conference (bridging a
+    # second leg onto a transferred call is rejected with HTTP 422).
+    merges_through_conference = True
 
     def __init__(
         self,
@@ -115,7 +134,9 @@ class TelnyxSipTelephony(TelephonyAdapter):
         http: httpx.Client | None = None,
         fallbacks: tuple[tuple[str, str, str], ...] = (),
         fallback_clients: tuple[httpx.Client, ...] = (),
+        voicemail_detection: bool = True,
     ) -> None:
+        self._voicemail_detection = voicemail_detection
         # The primary account from .env, then each complete fallback triplet
         # (TELNYX_*_2 / TELNYX_*_3), in order.
         self._profiles = [
@@ -176,8 +197,25 @@ class TelnyxSipTelephony(TelephonyAdapter):
 
     def dial(self, call_id: str, to_number: str) -> DialResult:
         ensure_allowed(to_number, self._allowed)
+        # Voicemail detection: Telnyx reports call.machine.detection.ended
+        # (human | machine | not_sure) shortly after the call is answered.
+        extra = {"answering_machine_detection": "detect"} if self._voicemail_detection else {}
         return self._rotate(
-            "dial", lambda p: self._dial_with(p, to_client_state(call_id), to_number)
+            "dial",
+            lambda p: self._dial_with(p, to_client_state(call_id), to_number, **extra),
+        )
+
+    def dial_assistant(self, call_id: str) -> DialResult:
+        """Dial xAI's SIP endpoint as its own leg; it joins the conference on answer."""
+        return self._rotate(
+            "dial the voice assistant",
+            lambda p: self._dial_with(
+                p,
+                ai_client_state(call_id),
+                self._sip_uri,
+                custom_headers=[{"name": CALL_ID_SIP_HEADER, "value": call_id}],
+                timeout_secs=30,
+            ),
         )
 
     def dial_human(
@@ -195,7 +233,7 @@ class TelnyxSipTelephony(TelephonyAdapter):
             lambda p: self._dial_with(p, human_client_state(call_id), to_number),
         )
 
-    def _dial_with(self, profile, client_state: str, to_number: str) -> DialResult:
+    def _dial_with(self, profile, client_state: str, to_number: str, **extra) -> DialResult:
         body = self._post(
             profile,
             "/calls",
@@ -208,6 +246,7 @@ class TelnyxSipTelephony(TelephonyAdapter):
                 "webhook_url": self._webhook_url,
                 "webhook_url_method": "POST",
                 "timeout_secs": 60,
+                **extra,
             },
         )
         data = body.get("data") or {}
@@ -235,23 +274,103 @@ class TelnyxSipTelephony(TelephonyAdapter):
                 {
                     "to": self._sip_uri,
                     "client_state": to_client_state(call_id),
-                    # VERIFY: custom SIP headers on transfer to a sip: URI.
-                    "headers": [{"name": CALL_ID_SIP_HEADER, "value": call_id}],
+                    "custom_headers": [{"name": CALL_ID_SIP_HEADER, "value": call_id}],
                 },
             ),
         )
 
     def bridge_calls(self, human_ref: str, insurer_ref: str) -> None:
-        """Join the answered human leg into the insurer call (the human merge)."""
+        """Join two plain legs. Not used for merges: Telnyx rejects bridging onto a
+        transferred leg (422), so merges go through a conference instead."""
         self._rotate(
             "bridge the human into the call",
             lambda p: self._post(
                 p,
                 f"/calls/{human_ref}/actions/bridge",
-                # VERIFY: the bridge action's target field, and bridging a
-                # previously transferred insurer leg.
-                {"bridge_call_control_id": insurer_ref},
+                {"call_control_id": insurer_ref},
             ),
+        )
+
+    # ------------------------------------------------------------------ conference + media
+
+    def create_conference(self, call_id: str, insurer_ref: str) -> str:
+        """Put the answered insurer leg into a new conference; returns its id."""
+        body = self._rotate(
+            "create the conference",
+            lambda p: self._post(
+                p,
+                "/conferences",
+                {
+                    "call_control_id": insurer_ref,
+                    "name": f"amyna-{call_id}",
+                    "beep_enabled": "never",
+                    "start_conference_on_create": True,
+                    "client_state": to_client_state(call_id),
+                },
+            ),
+        )
+        conference_id = (body.get("data") or {}).get("id")
+        if not conference_id:
+            raise UpstreamError(
+                "Telnyx returned an unexpected conference response.", code="telnyx_bad_response"
+            )
+        return str(conference_id)
+
+    def join_conference(self, conference_ref: str, leg_ref: str) -> None:
+        self._rotate(
+            "join the conference",
+            lambda p: self._post(
+                p,
+                f"/conferences/{conference_ref}/actions/join",
+                {
+                    "call_control_id": leg_ref,
+                    "beep_enabled": "never",
+                    "end_conference_on_exit": False,
+                },
+            ),
+        )
+
+    def hold_participants(
+        self, conference_ref: str, leg_refs: list[str], *, audio_url: str | None = None
+    ) -> None:
+        """A held participant neither hears the others nor is heard by them."""
+        body: dict = {"call_control_ids": leg_refs}
+        if audio_url:
+            body["audio_url"] = audio_url
+        self._rotate(
+            "hold a conference participant",
+            lambda p: self._post(p, f"/conferences/{conference_ref}/actions/hold", body),
+        )
+
+    def unhold_participants(self, conference_ref: str, leg_refs: list[str]) -> None:
+        self._rotate(
+            "unhold a conference participant",
+            lambda p: self._post(
+                p,
+                f"/conferences/{conference_ref}/actions/unhold",
+                {"call_control_ids": leg_refs},
+            ),
+        )
+
+    def playback_start(self, leg_ref: str, audio_url: str, call_id: str) -> None:
+        """Play an MP3 to one leg; Telnyx reports call.playback.ended when done."""
+        self._rotate(
+            "play the authorization recording",
+            lambda p: self._post(
+                p,
+                f"/calls/{leg_ref}/actions/playback_start",
+                {
+                    "audio_url": audio_url,
+                    "audio_type": "mp3",
+                    "client_state": to_client_state(call_id),
+                },
+            ),
+        )
+
+    def playback_stop(self, leg_ref: str) -> None:
+        self._rotate(
+            "stop playback",
+            lambda p: self._post(p, f"/calls/{leg_ref}/actions/playback_stop", {}),
         )
 
     def hangup(self, provider_call_ref: str) -> None:

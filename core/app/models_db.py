@@ -7,7 +7,18 @@ Enum values are stored as strings (the contract enums' values). JSON columns hol
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base, utcnow
@@ -288,6 +299,15 @@ class CallRow(Base):
     merge_deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # xAI-side call id after the carrier leg bridges to xAI SIP (task 15).
     xai_call_ref: Mapped[str | None] = mapped_column(String(120))
+    # Telnyx conference that holds the insurer, the AI leg and (when needed) the patient.
+    conference_ref: Mapped[str | None] = mapped_column(String(120))
+    # Telnyx call control id of the outbound leg to the xAI SIP endpoint.
+    ai_leg_ref: Mapped[str | None] = mapped_column(String(120))
+    # Call start sequence: answered -> playing_authorization -> connecting_assistant
+    # -> assistant_connected (or assistant_transferred when conferencing failed).
+    media_phase: Mapped[str | None] = mapped_column(String(32))
+    # Safety deadline for the current media step (e.g. a playback that never ends).
+    media_deadline_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     to_number_masked: Mapped[str | None] = mapped_column(String(32))
     turns: Mapped[list[dict[str, Any]]] = mapped_column(JSON)
     insurer_response: Mapped[dict[str, Any] | None] = mapped_column(JSON)
@@ -295,6 +315,24 @@ class CallRow(Base):
     started_at: Mapped[datetime] = _created()
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     end_reason: Mapped[str | None] = mapped_column(Text)
+
+
+class AuthorizationRecordingRow(Base):
+    """The patient's spoken authorization memo, converted for phone playback (MP3).
+
+    PHI: served only through an unguessable token (only its hash is stored) and
+    only while the case has a live insurer call.
+    """
+
+    __tablename__ = "authorization_recordings"
+
+    id: Mapped[str] = mapped_column(ID, primary_key=True)
+    case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), unique=True, index=True)
+    audio: Mapped[bytes] = mapped_column(LargeBinary)
+    mime_type: Mapped[str] = mapped_column(String(32))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = _created()
 
 
 class AgentRunRow(Base):

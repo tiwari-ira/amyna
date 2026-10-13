@@ -29,7 +29,13 @@ from typing import Any
 from claimshield_contracts.enums import TurnAction
 
 from ...services.security_policy import HOLD_LINE
-from .base import VoiceAdapter, VoiceEventHandler, VoiceSessionConfig
+from .base import (
+    RESUME_UNREACHABLE,
+    RESUME_VERIFIED,
+    VoiceAdapter,
+    VoiceEventHandler,
+    VoiceSessionConfig,
+)
 from .dispatcher import CONTROL_KEY, CONTROL_PAUSE
 
 log = logging.getLogger("claimshield.voice.xai")
@@ -43,6 +49,29 @@ EVT_OUTPUT_TRANSCRIPT_DONE = (
 )
 EVT_FUNCTION_ARGS_DONE = "response.function_call_arguments.done"
 EVT_ERROR = "error"
+
+
+#: Without a "greet" command (the AI leg joined the conference) the agent still
+#: speaks after this many seconds, so a lost webhook never leaves a silent call.
+GREET_FALLBACK_S = 8.0
+DEFAULT_GREETING = (
+    "The call just connected. Speak first, before they say anything. Introduce yourself "
+    "as Amyna, an automated assistant calling for the member about a medical bill they "
+    "authorized you to discuss. Then ask who you are speaking with. One short turn."
+)
+RESUME_NOTES = {
+    RESUME_VERIFIED: (
+        "The member joined this call and handled the identity verification directly with "
+        "the representative. They may still be on the line. Do not ask for the member or "
+        "for that information again. Briefly thank the representative and continue the dispute."
+    ),
+    RESUME_UNREACHABLE: (
+        "The member could not be reached by phone just now. Tell the representative, in one "
+        "short turn, that you couldn't reach the member and that the member will verify "
+        "directly later. Ask whether they can continue with the dispute without it or note a "
+        "callback. Never provide or guess the information yourself."
+    ),
+}
 
 
 @dataclass
@@ -74,6 +103,10 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
         self._model = model
         self._voice = voice
         self._calls: dict[str, _LiveCall] = {}
+        # Commands that arrived before the session attached (e.g. "greet" when the
+        # AI leg joined the conference before xAI's inbound webhook was processed).
+        self._early: dict[str, list[str]] = {}
+        self._lock = threading.Lock()
 
     # ------------------------------------------------------------------ VoiceAdapter
 
@@ -84,11 +117,18 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
             name=f"xai-voice-{config.call_id}",
             daemon=True,
         )
-        self._calls[config.call_id] = call
+        with self._lock:
+            call.pending_commands.extend(self._early.pop(config.call_id, []))
+            self._calls[config.call_id] = call
         call.thread.start()
 
-    def resume_session(self, call_id: str, handler: VoiceEventHandler) -> None:
-        self._command(call_id, "resume")
+    def resume_session(
+        self, call_id: str, handler: VoiceEventHandler, note: str = RESUME_VERIFIED
+    ) -> None:
+        self._command(call_id, f"resume:{note}")
+
+    def start_speaking(self, call_id: str) -> None:
+        self._command(call_id, "greet")
 
     def pause_session(self, call_id: str) -> None:
         self._command(call_id, "pause")
@@ -133,7 +173,13 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
                 self._endpoint(call.config), additional_headers=headers
             ) as ws:
                 await ws.send(json.dumps(self.session_update(call.config)))
-                await self._greet(ws, call)
+                if call.config.metadata.get("wait_for_join") == "1":
+                    # Conference mode: greet when Core reports the AI leg is audible.
+                    call.loop.call_later(
+                        GREET_FALLBACK_S, call.commands.put_nowait, "greet"
+                    )
+                else:
+                    await self._greet(ws, call)
                 commands = asyncio.create_task(self._consume_commands(ws, call))
                 try:
                     async for raw in ws:
@@ -152,7 +198,8 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
         call_id = call.config.call_id
         event_type = event.get("type")
         if event_type == EVT_SESSION_UPDATED:
-            await self._greet(ws, call)
+            if call.config.metadata.get("wait_for_join") != "1":
+                await self._greet(ws, call)
         elif event_type == EVT_INPUT_TRANSCRIPT_DONE:
             decision = handler.on_insurer_utterance(call_id, event.get("transcript", ""))
             if decision.action == TurnAction.PAUSE_FOR_HUMAN:
@@ -180,7 +227,9 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
                 )
             )
             if result.get(CONTROL_KEY) == CONTROL_PAUSE:
-                await self._hold(ws, call, HOLD_LINE)
+                # The model already said it can't share that (prompt rule 3); a hold
+                # that is already in place is not repeated.
+                await self._hold(ws, call, None)
             elif not call.paused:
                 await ws.send(json.dumps({"type": "response.create"}))
         elif event_type in EVT_OUTPUT_TRANSCRIPT_DONE:
@@ -195,20 +244,9 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
         if call.greeted or call.paused:
             return
         call.greeted = True
+        instructions = call.config.metadata.get("greeting") or DEFAULT_GREETING
         await ws.send(
-            json.dumps(
-                {
-                    "type": "response.create",
-                    "response": {
-                        "instructions": (
-                            "The call just connected. Speak first, before they say anything. "
-                            "Introduce yourself as Amyna, an automated assistant calling about "
-                            "a medical bill the member authorized you to discuss. Then ask who "
-                            "you are speaking with. One short turn."
-                        )
-                    },
-                }
-            )
+            json.dumps({"type": "response.create", "response": {"instructions": instructions}})
         )
 
     async def _say(self, ws: Any, text: str, *, interrupt: bool) -> None:
@@ -224,9 +262,13 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
             )
         )
 
-    async def _hold(self, ws: Any, call: _LiveCall, line: str) -> None:
+    async def _hold(self, ws: Any, call: _LiveCall, line: str | None) -> None:
+        """Stop replying on its own. Idempotent: one hold line per pause."""
+        if call.paused:
+            return
         call.paused = True
-        await self._say(ws, line, interrupt=True)
+        if line:
+            await self._say(ws, line, interrupt=True)
         await ws.send(json.dumps(self._auto_response(enabled=False)))
 
     @staticmethod
@@ -247,8 +289,13 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
             command = await call.commands.get()
             if command == "pause":
                 await self._hold(ws, call, HOLD_LINE)
-            elif command == "resume":
+            elif command == "greet":
+                await self._greet(ws, call)
+            elif command.startswith("resume"):
+                if not call.paused:
+                    continue  # duplicate resume: say nothing twice
                 call.paused = False
+                note = command.partition(":")[2] or RESUME_VERIFIED
                 await ws.send(json.dumps(self._auto_response(enabled=True)))
                 await ws.send(
                     json.dumps(
@@ -260,8 +307,9 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
                                 "content": [
                                     {
                                         "type": "input_text",
-                                        "text": "The member verified their identity directly "
-                                        "with the representative. Continue the dispute.",
+                                        "text": RESUME_NOTES.get(
+                                            note, RESUME_NOTES[RESUME_VERIFIED]
+                                        ),
                                     }
                                 ],
                             },
@@ -274,9 +322,12 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
                 return
 
     def _command(self, call_id: str, command: str) -> None:
-        call = self._calls.get(call_id)
-        if call is None:
-            return
+        with self._lock:
+            call = self._calls.get(call_id)
+            if call is None:
+                if command == "greet":
+                    self._early.setdefault(call_id, []).append(command)
+                return
         if call.loop is None or call.commands is None:
             call.pending_commands.append(command)
             return

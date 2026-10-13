@@ -135,14 +135,24 @@ def drain(container: "Container", *, limit: int = 25) -> dict[str, int]:
         ran += 1
     # Periodic sweeps ride every worker tick (nothing else schedules them): escalate
     # patients who never answered the human-merge call (17A; never auto-resume).
+    run_call_timers(container)
+    return {"ran": ran, "failed": failed}
+
+
+def run_call_timers(container: "Container") -> None:
+    """Call deadlines: unanswered patient calls and stuck call start steps."""
+    from . import call_flow
+
     try:
         escalated = container.voice_manager.expire_overdue_merges()
-    except Exception as exc:  # a sweep failure must not fail the drain
-        log.warning("merge sweep failed (%s)", type(exc).__name__)
-    else:
-        if escalated:
-            log.info("merge sweep escalated %d unanswered patient call(s)", escalated)
-    return {"ran": ran, "failed": failed}
+        moved = call_flow.expire_media_steps(container)
+    except Exception as exc:  # a sweep failure must not fail the caller
+        log.warning("call timer sweep failed (%s)", type(exc).__name__)
+        return
+    if escalated:
+        log.info("merge sweep escalated %d unanswered patient call(s)", escalated)
+    if moved:
+        log.info("moved %d call(s) past a stuck call step", moved)
 
 
 def _is_due(job: JobRow) -> bool:

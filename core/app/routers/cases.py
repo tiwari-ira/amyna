@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Request, status
+from pydantic import BaseModel, Field
 
 from claimshield_contracts.api import CallbackPhoneIn, CaseCreate, ConsentCreate, FinchNodeClaims
 from claimshield_contracts.models import (
@@ -127,6 +128,48 @@ def set_callback_phone(
         assert_case_access(case, _patient_user(db, request))
         case_service.set_callback_phone(db, case, body.phone, actor=identity.actor)
         return mappers.case_to_model(case)
+
+
+class AuthorizationRecordingIn(BaseModel):
+    """The patient's spoken authorization memo (base64 audio, as Relay received it)."""
+
+    audio_base64: str = Field(min_length=16, max_length=9_000_000)
+    mime_type: str = Field(min_length=3, max_length=64)
+
+
+class AuthorizationRecordingOut(BaseModel):
+    stored: bool
+    size_bytes: int
+
+
+@router.put("/{case_id}/authorization-recording", response_model=AuthorizationRecordingOut)
+def put_authorization_recording(
+    case_id: str,
+    body: AuthorizationRecordingIn,
+    request: Request,
+    identity: ServiceIdentity = Depends(require_scopes("cases:write")),
+    container: Container = Depends(get_container),
+) -> AuthorizationRecordingOut:
+    """Store the memo that plays to the insurer when the call connects (converted to MP3)."""
+    import base64
+    import binascii
+
+    from ..errors import InvalidInput
+    from ..services import recording_service
+
+    try:
+        audio = base64.b64decode(body.audio_base64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise InvalidInput(
+            "audio_base64 is not valid base64.", code="recording_unreadable"
+        ) from exc
+    with container.session_scope() as db:
+        case = case_service.get_case_row(db, case_id)
+        assert_case_access(case, _patient_user(db, request))
+        row = recording_service.store_authorization(
+            db, case, audio, body.mime_type, actor=identity.actor
+        )
+        return AuthorizationRecordingOut(stored=True, size_bytes=row.size_bytes)
 
 
 @router.get("/{case_id}/finchnode/claims", response_model=FinchNodeClaims)

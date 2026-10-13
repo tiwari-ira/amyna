@@ -10,6 +10,7 @@ import { CoreError, type FinchNodeClaimSummary } from "../coreClient";
 import type { Conversation } from "../store";
 import { BUTTONS, copy } from "../ux/messages";
 import { type HandlerContext, requireCase, say } from "./context";
+import { uploadAuthorizationMemo } from "./authorizationMemo";
 import { deliverPending } from "./humanHandoff";
 import { sendCaseReport } from "./patientReport";
 
@@ -118,6 +119,17 @@ export async function answerInsurerCall(
     await say(ctx, convo, copy.insurerCallDeclined);
     return;
   }
+  await uploadAuthorizationMemo(ctx, convo); // last chance before the call plays it
+  if (ctx.config.askCallbackPhone && !convo.callbackAsked) {
+    // Relay contacts carry no phone number, so the patient tells us where to reach them.
+    const detail = await ctx.core.getCase(requireCase(convo));
+    if (!detail.callback_phone_masked) {
+      convo.callbackAsked = true;
+      convo.stage = "awaiting_callback_phone"; // pendingApproval is kept for the next reply
+      await say(ctx, convo, copy.askCallbackPhone());
+      return;
+    }
+  }
   convo.pendingApproval = undefined;
   convo.stage = "in_review";
   await replyToNotification(ctx, convo, `ntf:${pending.notificationId}:APPROVE`, pending.eventId);
@@ -176,22 +188,6 @@ export async function replyToNotification(
     convo.stage = "awaiting_insurer_call";
     await say(ctx, convo, copy.askInsurerCall());
     return;
-  }
-  if (
-    delivered.kind === "approval_request" &&
-    choice === "APPROVE" &&
-    ctx.config.askCallbackPhone &&
-    !convo.callbackAsked &&
-    !convo.insurerCallAsked
-  ) {
-    const detail = await ctx.core.getCase(requireCase(convo));
-    if (!detail.callback_phone_masked) {
-      convo.callbackAsked = true;
-      convo.pendingApproval = { notificationId: notificationId!, eventId };
-      convo.stage = "awaiting_callback_phone";
-      await say(ctx, convo, copy.askCallbackPhone());
-      return;
-    }
   }
   await ctx.core.sendSignedEvent({
     event_id: eventId,

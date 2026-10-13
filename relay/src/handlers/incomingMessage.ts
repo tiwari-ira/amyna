@@ -19,6 +19,8 @@ import {
   replyToNotification,
   reviewBill,
 } from "./approvalFlow";
+import { keepAuthorizationMemo, uploadAuthorizationMemo } from "./authorizationMemo";
+import { checkConnect } from "./connect";
 import { answerDataConsent, askDataConsent } from "./consent";
 import { type HandlerContext, patientScope, requireCase, say, serialize } from "./context";
 import {
@@ -83,6 +85,7 @@ async function capturePatientId(
     convo.finchnodePatientId = patientId;
     convo.caseId = created.case_id;
   }
+  await uploadAuthorizationMemo(ctx, convo);
   if (convo.healthConsentGiven) {
     await ctx.core.recordConsent(requireCase(convo), {
       consent_type: "health_data_access",
@@ -134,13 +137,9 @@ async function route(ctx: HandlerContext, event: InboundEvent): Promise<void> {
   }
   if (event.audio) {
     if (convo.stage === "awaiting_account_memo") {
-      convo.accountConsentAudioUrl = event.audio.url;
       ctx.log(`account authorization memo received (${event.audio.mimeType})`);
-      await say(
-        ctx,
-        convo,
-        "Got it. I'll use that recording as your authorization, and I'll call you in if the insurer needs you.",
-      );
+      const kept = await keepAuthorizationMemo(ctx, convo, event.audio.url, event.audio.mimeType);
+      await say(ctx, convo, kept ? copy.memoKept : copy.memoNotKept);
       convo.stage = "awaiting_patient_id";
       await say(ctx, convo, copy.idGuidance);
       return;

@@ -260,7 +260,8 @@ def test_voice_session_failure_hangs_up_and_closes_the_case(
     )
     assert response.status_code == 502
     case = _case(client, relay, awaiting_approval["case_id"])
-    assert case["state"] == "FAILED" and case["calls"][0]["status"] == "failed"
+    # The call failed, but the approved dispute stays open so the patient can text "call".
+    assert case["state"] == "APPROVED" and case["calls"][0]["status"] == "failed"
     assert container.telephony.hung_up == [case["calls"][0]["provider_call_ref"]]
 
 
@@ -287,7 +288,8 @@ def test_lost_voice_session_on_resume_closes_the_call(
     )
     assert response.status_code == 502
     case = _case(client, relay, case_id)
-    assert case["state"] == "FAILED" and case["calls"][0]["status"] == "failed"
+    # The call failed, but the approved dispute stays open so the patient can text "call".
+    assert case["state"] == "APPROVED" and case["calls"][0]["status"] == "failed"
 
 
 # --------------------------------------------------------------------------- upstream and audit

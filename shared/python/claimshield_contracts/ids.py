@@ -24,6 +24,7 @@ ID_PREFIXES = {
     "user": "user",
     "finch_link": "flink",
     "job": "job",
+    "recording": "authrec",
 }
 
 

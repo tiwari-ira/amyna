@@ -44,6 +44,8 @@ const CORE_PROBLEMS: Record<string, string> = {
   patient_session_required: "Sign-in isn't set up for this Amyna service yet.",
   dev_sessions_disabled: "Sign-in isn't set up for this Amyna service yet.",
   case_forbidden: "That case belongs to someone else, so I can't open it.",
+  already_resolved: "That's already taken care of. I'll keep you posted here.",
+  call_not_active: "That call has already ended. I'll keep you posted here.",
 };
 
 const money = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
@@ -136,11 +138,17 @@ export const copy = {
   insurerCallDeclined: "Okay. I won't call your insurance company. Send \"restart\" if you want to go through the bill again.",
   askCallbackPhone: (): OutboundMessage => ({
     text:
-      "Before I call your insurer: if they ask for something only you can give (like your SSN), " +
-      "I'll pause and call you so you can join the same call. What number should I call?",
+      "One more thing before I call: if your insurance company asks for something only you can give, " +
+      "like your Social Security number, I'll call your phone and add you to the same call so you can " +
+      "tell them yourself. What number should I call? (Never send your SSN here.)",
     buttons: [BUTTONS.skipPhone],
   }),
-  callbackPhoneSaved: (masked: string) => `Thanks. If the insurer needs you, I'll call ${masked}.`,
+  callbackPhoneSaved: (masked: string) =>
+    `Thanks. If they need you, I'll call ${masked} and add you to the call. Calling your insurance company now.`,
+  memoKept:
+    "Got it. I'll play your recording to your insurance company at the start of the call, and I'll call you in if they need you.",
+  memoNotKept:
+    "Got it, thanks. I couldn't save the audio, so on the call I'll tell your insurance company you authorized it.",
   callbackPhoneInvalid: 'That doesn\'t look like a phone number. Send it like 555-123-4567, or tap "Don\'t call me".',
   tryAgain: "Sorry, something went wrong on my side. Please send that again in a minute.",
   // Shown only when the flow truly needs the patient ID (demo/sandbox identity).
@@ -160,9 +168,6 @@ export const copy = {
     "Share your location in this chat (Once is fine, or keep sharing while you're at the appointment) " +
     "and I'll ping you if it looks like you're at a hospital so you can record the visit. " +
     'You can also send "I\'m at the hospital".',
-  locationAlreadySharing:
-    "I can't send a new location button while an older share is still on. " +
-    "Stop the location share in this chat, and I'll ask you to share it again right away.",
   nearHospital: (name: string): OutboundMessage => ({
     text:
       `Looks like you're at ${name}. If you're at a hospital, do you want to record this visit?\n\n` +

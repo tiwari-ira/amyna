@@ -3,7 +3,9 @@
 AI_CALLING -> SENSITIVE_REQUEST_DETECTED -> PATIENT_BEING_CONNECTED
 -> PATIENT_CONNECTED_WITH_HUMAN -> PATIENT_HANDLING_VERIFICATION
 -> PATIENT_RELEASED -> AI_RESUMING -> AI_CALLING, with MERGE_FAILED as the
-explicit timeout/failure escape. The AI never resumes automatically.
+explicit timeout/failure escape. After a failed merge the insurer stays on the
+line and the AI resumes only to say the member will verify later; it never
+provides the requested information.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -77,8 +79,41 @@ def test_no_handoff_phone_keeps_the_pause_only_flow(tmp_path: Path) -> None:
     assert call["merge_phase"] == "sensitive_request_detected"
 
 
-def test_a_failed_merge_is_an_explicit_state_and_never_auto_resumes(tmp_path: Path) -> None:
+class _ScriptedVoice:
+    """Stands in for a live session: records commands, speaks only when told."""
+
+    needs_sip_attach = False
+    mode = "scripted"
+
+    def __init__(self) -> None:
+        self.resumed: list[str] = []
+        self.paused: list[str] = []
+
+    def start_session(self, config, handler) -> None:
+        handler.on_insurer_utterance(config.call_id, SSN_UTTERANCE)
+
+    def resume_session(self, call_id, handler, note="verified") -> None:
+        self.resumed.append(note)
+
+    def pause_session(self, call_id) -> None:
+        self.paused.append(call_id)
+
+    def end_session(self, call_id, reason) -> None:
+        return None
+
+    def start_speaking(self, call_id) -> None:
+        return None
+
+
+def _scripted(app) -> _ScriptedVoice:
+    voice = _ScriptedVoice()
+    pytest.MonkeyPatch().setattr(app.state.container, "voice", voice)
+    return voice
+
+
+def test_a_failed_merge_keeps_the_insurer_and_resumes_without_the_info(tmp_path: Path) -> None:
     app, client, relay, setup = _merged_ready(tmp_path)
+    voice = _scripted(app)
 
     def boom(call_id, to_number, insurer_ref=None):
         raise RuntimeError("audio lines are busy")
@@ -86,29 +121,27 @@ def test_a_failed_merge_is_an_explicit_state_and_never_auto_resumes(tmp_path: Pa
     pytest.MonkeyPatch().setattr(app.state.container.telephony, "dial_human", boom)
     call = client.post("/voice/start", json={"case_id": setup["case_id"]}, headers=relay).json()
     assert call["merge_phase"] == "merge_failed"
-    assert call["status"] == "paused_for_human"  # AI stays paused
+    assert call["status"] == "in_progress"  # the insurer is still on the line
+    assert voice.resumed == ["unreachable"]  # the AI tells the rep; it never shares the info
+    assert app.state.container.telephony.hung_up == []
     notes = client.get(f"/cases/{setup['case_id']}/notifications", headers=relay).json()
-    assert any("couldn't reach" in n["text"] for n in notes)
-    # A duplicate sensitive request after a failed merge does NOT dial again.
-    voice = service_headers(app.state.container.settings, ServiceName.VOICE)
+    assert any("couldn't connect you to the call" in n["text"] for n in notes)
+    # The same request right afterwards does not pause or dial again.
+    voice_headers = service_headers(app.state.container.settings, ServiceName.VOICE)
     again = client.post(
         f"/voice/{call['call_id']}/event",
         json={"type": "insurer_utterance", "text": SSN_UTTERANCE},
-        headers=voice,
+        headers=voice_headers,
     ).json()
-    assert again["call"]["merge_phase"] == "merge_failed"
+    assert again["call"]["status"] == "in_progress"
     assert app.state.container.telephony.human_dialed == []
-    resolved = client.post(
-        f"/human-intervention/{call['open_intervention_id']}/resolve",
-        json={"choice": "DONE", "channel": "relay"},
-        headers=relay,
-    ).json()
-    assert resolved["case_state"] == "RESOLVED"
 
 
-def test_an_unreachable_patient_times_out_and_escalates(tmp_path: Path) -> None:
-    """PATIENT_BEING_CONNECTED has a safe deadline; expiry escalates, never resumes."""
+def test_an_unreachable_patient_times_out_and_the_call_goes_on(tmp_path: Path) -> None:
+    """PATIENT_BEING_CONNECTED has a deadline: the ringing leg is dropped, the
+    insurer stays, and the AI continues without the information."""
     app, client, relay, setup = _merged_ready(tmp_path)
+    voice = _scripted(app)
 
     def not_answered(call_id, to_number, insurer_ref=None):
         return DialResult(provider_call_ref="MOCK-HU-X", status="initiated")
@@ -120,10 +153,11 @@ def test_an_unreachable_patient_times_out_and_escalates(tmp_path: Path) -> None:
     assert app.state.container.voice_manager.expire_overdue_merges(now=future) == 1
     merged = client.get(f"/voice/{call['call_id']}", headers=relay).json()
     assert merged["merge_phase"] == "merge_failed"
-    assert merged["status"] == "paused_for_human"  # never auto-resumed
-    assert app.state.container.telephony.hung_up == []  # insurer leg kept alive
+    assert merged["status"] == "in_progress"
+    assert app.state.container.telephony.hung_up == ["MOCK-HU-X"]  # only the ringing leg
+    assert voice.resumed == ["unreachable"]
     notes = client.get(f"/cases/{setup['case_id']}/notifications", headers=relay).json()
-    assert any("did not answer" in n["text"] or "couldn't reach" in n["text"] for n in notes)
+    assert any("didn't pick up in time" in n["text"] for n in notes)
 
 
 def test_done_runs_the_full_release_cycle_before_the_ai_resumes(tmp_path: Path) -> None:
@@ -139,5 +173,70 @@ def test_done_runs_the_full_release_cycle_before_the_ai_resumes(tmp_path: Path) 
     finished: dict[str, Any] = client.get(f"/voice/{call['call_id']}", headers=relay).json()
     assert finished["merge_phase"] is None  # back to the AI_CALLING baseline
     texts = [t["text"] for t in finished["turns"]]
-    assert "The human left the call." in texts
-    assert "Member verified directly with the representative." in texts
+    assert texts.count("The member verified directly with the representative.") == 1
+
+
+def test_the_patient_hanging_up_resumes_the_ai(tmp_path: Path) -> None:
+    """Hanging up after speaking with the rep counts as Done (no chat tap needed)."""
+    app, client, relay, setup = _merged_ready(tmp_path)
+    voice = _scripted(app)
+    call = client.post("/voice/start", json={"case_id": setup["case_id"]}, headers=relay).json()
+    assert call["merge_phase"] == "patient_connected_with_human"
+    app.state.container.voice_manager.patient_left(call["call_id"])
+    after = client.get(f"/voice/{call['call_id']}", headers=relay).json()
+    assert after["status"] == "in_progress"
+    assert voice.resumed == ["verified"]
+    # A late Done tap in the chat is harmless.
+    late = client.post(
+        f"/human-intervention/{call['open_intervention_id']}/resolve",
+        json={"choice": "DONE", "channel": "relay"},
+        headers=relay,
+    )
+    assert late.status_code == 409
+    assert voice.resumed == ["verified"]
+
+
+def test_the_model_asking_again_right_after_does_not_redial(tmp_path: Path) -> None:
+    """Seen live: after the member finished, the model called request_human again
+    and the phone was dialed a second time."""
+    app, client, relay, setup = _merged_ready(tmp_path)
+    _scripted(app)
+    call = client.post("/voice/start", json={"case_id": setup["case_id"]}, headers=relay).json()
+    manager = app.state.container.voice_manager
+    manager.patient_left(call["call_id"])
+    result = manager.on_tool_call(
+        call["call_id"],
+        "request_human",
+        {"reason": "identity_verification", "detail": "Representative asked for the SSN."},
+    )
+    assert result["status"] == "already_handled"
+    assert app.state.container.telephony.human_dialed == [call["call_id"]]  # still one dial
+
+
+def test_the_insurers_own_number_is_never_dialed_as_the_patient(tmp_path: Path) -> None:
+    """Seen live: the handoff phone was the insurer's own line."""
+    app, client, relay, setup = _approved_case(
+        tmp_path,
+        human_handoff_phone="+12487208903",  # the demo insurer's number
+        telephony_allowed_numbers="+12487208903",
+    )
+    call = client.post("/voice/start", json={"case_id": setup["case_id"]}, headers=relay).json()
+    assert app.state.container.telephony.human_dialed == []
+    assert call["merge_phase"] == "sensitive_request_detected"
+    notes = client.get(f"/cases/{setup['case_id']}/notifications", headers=relay).json()
+    assert any("insurer's own line" in n["text"] for n in notes)
+
+
+def test_a_number_read_aloud_is_never_stored(tmp_path: Path) -> None:
+    app, client, relay, setup = _merged_ready(tmp_path)
+    _scripted(app)
+    call = client.post("/voice/start", json={"case_id": setup["case_id"]}, headers=relay).json()
+    voice_headers = service_headers(app.state.container.settings, ServiceName.VOICE)
+    client.post(
+        f"/voice/{call['call_id']}/event",
+        json={"type": "insurer_utterance", "text": "Okay, I have 123-45-6789 on file."},
+        headers=voice_headers,
+    )
+    turns = client.get(f"/voice/{call['call_id']}", headers=relay).json()["turns"]
+    assert all("123-45-6789" not in t["text"] for t in turns)
+    assert any("redacted" in t["flags"] for t in turns)

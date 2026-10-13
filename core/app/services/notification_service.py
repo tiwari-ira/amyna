@@ -222,14 +222,36 @@ def notify_approval_request(
 
 
 def notify_handoff(
-    db: Session, container: "Container", case: CaseRow, intervention: InterventionRow
+    db: Session,
+    container: "Container",
+    case: CaseRow,
+    intervention: InterventionRow,
+    *,
+    dialing: str | None = None,
+    problem: str | None = None,
 ) -> NotificationRow:
+    """The call needs the patient. ``dialing`` = the masked number being called now;
+    otherwise ``problem`` says why they can't be added to the call."""
     payer = case.payer_name or "your insurer"
-    text = (
-        f"Amyna paused your call with {payer}. {intervention.prompt} "
-        "Amyna never shares your SSN, PINs or passwords. Please verify directly with "
-        "the representative, then tap Done to let Amyna continue."
-    )
+    if dialing:
+        text = (
+            f"Your call with {payer} needs you. {intervention.prompt} I'm calling you now at "
+            f"{dialing} to add you to the same call. Answer it and tell the representative "
+            "yourself. I never share that for you, so please don't type it here. When you "
+            "hang up (or tap Done), I'll take the call back over."
+        )
+    elif problem:
+        text = (
+            f"Your call with {payer} needs you. {intervention.prompt} I can't add you to the "
+            f"call because {problem}, so they're on hold. I never share your SSN, PINs or "
+            "passwords for you. Tap Done to have me continue without it, or Cancel call "
+            "to end the call."
+        )
+    else:
+        text = (
+            f"Your call with {payer} needs you. {intervention.prompt} I never share your "
+            "SSN, PINs or passwords. Tap Done to have me continue, or Cancel call to end it."
+        )
     return notify(
         db,
         container,

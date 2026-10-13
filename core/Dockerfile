@@ -3,6 +3,11 @@
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+# ffmpeg converts the patient's voice-memo authorization (AAC/M4A) to MP3,
+# the format Telnyx can play into the insurer call.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /repo
 
 COPY shared/python shared/python

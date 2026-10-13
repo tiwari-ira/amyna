@@ -14,6 +14,8 @@ class DialResult:
 
 class TelephonyAdapter(ABC):
     mode: str
+    # True when a patient can only be added through the call's conference (live Telnyx).
+    merges_through_conference: bool = False
 
     @abstractmethod
     def dial(self, call_id: str, to_number: str) -> DialResult:
@@ -38,6 +40,15 @@ class TelephonyAdapter(ABC):
 
     def bridge_calls(self, human_ref: str, insurer_ref: str) -> None:
         """Join two call legs into one call. Default: unsupported."""
+        return None
+
+    def hold_participants(
+        self, conference_ref: str, leg_refs: list[str], *, audio_url: str | None = None
+    ) -> None:
+        """Hold conference participants (the AI while the patient verifies). Default: no-op."""
+        return None
+
+    def unhold_participants(self, conference_ref: str, leg_refs: list[str]) -> None:
         return None
 
 
