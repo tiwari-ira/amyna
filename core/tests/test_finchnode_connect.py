@@ -278,8 +278,11 @@ def test_a_patient_number_outside_the_allowlist_is_never_dialed(tmp_path: Path) 
     app, client, relay, case_id = _approved(tmp_path, human_handoff_phone="")
     client.put(f"/cases/{case_id}/callback-phone", json={"phone": "555-555-0123"}, headers=relay)
     call = client.post("/voice/start", json={"case_id": case_id}, headers=relay).json()
-    assert call["merge_phase"] == "merge_failed"
+    # Nobody is dialed; the insurer waits for the patient's choice in the chat.
+    assert call["merge_phase"] == "sensitive_request_detected"
     assert app.state.container.telephony.human_numbers == []
+    notes = client.get(f"/cases/{case_id}/notifications", headers=relay).json()
+    assert any("isn't approved for calls" in n["text"] for n in notes)
 
 
 def test_invalid_callback_numbers_are_rejected(env: dict[str, Any]) -> None:

@@ -93,11 +93,15 @@ class Settings(BaseSettings):
     # even when it is not in TELEPHONY_ALLOWED_NUMBERS (one number per patient instead
     # of a single team phone). false => that number must be allowlisted too.
     telephony_allow_patient_phones: bool = False
-    # Safe window for the human to answer the merge call. If the human has not
-    # connected by then, the merge escalates to MERGE_FAILED (the patient is
-    # notified, the insurer leg is kept alive per policy, and the AI is never
-    # auto-resumed after a failed patient connection).
-    human_merge_timeout_s: int = 120
+    # Safe window for the patient to answer the merge call. If they have not
+    # connected by then, the merge escalates to MERGE_FAILED: the patient is
+    # texted, the insurer stays on the line, and the AI tells the representative
+    # the member will verify later (it never provides the information itself).
+    human_merge_timeout_s: int = 75
+    # Voicemail detection on the insurer call: a machine answer hangs up before the
+    # authorization recording plays. Automated phone menus can also be classified
+    # as a machine, so turn this off when dialing a real insurer IVR.
+    telephony_voicemail_detection: bool = True
     # Fallback Telnyx accounts, used in order when the primary is rejected
     # (auth/credit). Each must be a complete key + connection + number triplet.
     telnyx_api_key_2: str = ""

@@ -12,6 +12,7 @@ import { CoreError } from "../coreClient";
 import type { Conversation } from "../store";
 import { BUTTONS, copy } from "../ux/messages";
 import { answerRecordingChoice, offerRecording } from "./appointmentRecording";
+import { uploadAuthorizationMemo } from "./authorizationMemo";
 import { type HandlerContext, say } from "./context";
 import { deliverPending } from "./humanHandoff";
 import { askForLocation } from "./hospitalCheckin";
@@ -35,6 +36,7 @@ export async function startConnect(ctx: HandlerContext, convo: Conversation): Pr
   convo.connectMode = true;
   convo.stage = "awaiting_finchnode_connect";
   ctx.store.save(); // a retry must reuse this case, not open another
+  await uploadAuthorizationMemo(ctx, convo);
   await say(ctx, convo, copy.connectRecords(session.url));
   return true;
 }

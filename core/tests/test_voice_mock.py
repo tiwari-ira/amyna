@@ -54,7 +54,9 @@ def test_ssn_request_pauses_and_notifies(
     assert case["state"] == "HUMAN_REQUIRED"
     notes = client.get(f"/cases/{paused_call['case_id']}/notifications", headers=relay).json()
     handoff = [n for n in notes if n["kind"] == "human_handoff"]
-    assert handoff and "never shares your SSN" in handoff[0]["text"]
+    # No phone number on file: the patient is told why they can't join, and the insurer waits.
+    assert handoff and "don't have your phone number" in handoff[0]["text"]
+    assert "never share your SSN" in handoff[0]["text"]
     agent_lines = [t["text"] for t in call["turns"] if t["speaker"] == "agent"]
     assert not any(any(ch.isdigit() for ch in line) and "SSN" in line for line in agent_lines)
 
@@ -263,8 +265,8 @@ def _ready_to_call(tmp_path: Path):
 
 
 def test_a_paused_call_dials_bridges_and_releases_the_human(tmp_path: Path) -> None:
-    """HUMAN_HANDOFF_PHONE set: the SSN pause dials the human (mock: bridged
-    instantly); DONE hangs the human up first, then the insurer call finishes."""
+    """HUMAN_HANDOFF_PHONE set: the SSN pause dials the human (mock: joined
+    instantly); after DONE the AI finishes the call, then every leg is hung up."""
     app, client, relay, setup = _ready_to_call(tmp_path)
     call = client.post("/voice/start", json={"case_id": setup["case_id"]}, headers=relay).json()
     call_id = call["call_id"]
@@ -307,10 +309,11 @@ def test_duplicate_sensitive_request_does_not_merge_a_second_human_leg(tmp_path:
     assert len(telephony.bridged) == 1
 
 
-def test_a_failed_human_dial_still_pauses_the_call(
+def test_a_failed_human_dial_keeps_the_insurer_and_continues(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """If the human cannot be dialed, the proven pause-only flow continues."""
+    """If the patient's phone can't be dialed, the insurer is not dropped: the patient
+    is told, and the AI continues without the information (it never provides it)."""
     app, client, relay, setup = _ready_to_call(tmp_path)
 
     def boom(call_id, to_number, insurer_ref=None):
@@ -318,5 +321,16 @@ def test_a_failed_human_dial_still_pauses_the_call(
 
     monkeypatch.setattr(app.state.container.telephony, "dial_human", boom)
     call = client.post("/voice/start", json={"case_id": setup["case_id"]}, headers=relay).json()
-    assert call["status"] == "paused_for_human"
     assert app.state.container.telephony.human_dialed == []
+    assert call["merge_phase"] == "merge_failed"
+    assert call["status"] == "completed"  # the mock rep went on and resolved the dispute
+    intervention_id = _first_intervention(client, relay, setup["case_id"])
+    intervention = client.get(f"/human-intervention/{intervention_id}", headers=relay).json()
+    assert intervention["status"] == "cancelled"
+    notes = client.get(f"/cases/{setup['case_id']}/notifications", headers=relay).json()
+    assert any("couldn't connect you to the call" in n["text"] for n in notes)
+
+
+def _first_intervention(client: TestClient, relay: dict[str, str], case_id: str) -> str:
+    timeline = client.get(f"/cases/{case_id}/notifications", headers=relay).json()
+    return next(n["intervention_id"] for n in timeline if n["kind"] == "human_handoff")

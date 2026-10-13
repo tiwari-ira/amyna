@@ -94,6 +94,14 @@ export class CoreClient {
     return this.request("PUT", `/cases/${caseId}/callback-phone`, { phone });
   }
 
+  /** The patient's spoken authorization, played to the insurer when the call connects. */
+  putAuthorizationRecording(
+    caseId: string,
+    body: { audio_base64: string; mime_type: string },
+  ): Promise<{ stored: boolean; size_bytes: number }> {
+    return this.request("PUT", `/cases/${caseId}/authorization-recording`, body);
+  }
+
   /** Start linking records through FinchNode Connect (409 connect_unavailable in mock/demo). */
   startFinchNodeConnect(body: Schemas["FinchNodeConnectCreate"]): Promise<Schemas["FinchNodeConnectSession"]> {
     return this.request("POST", "/finchnode/connect-sessions", body);

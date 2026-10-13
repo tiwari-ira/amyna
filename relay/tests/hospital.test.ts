@@ -42,14 +42,14 @@ describe("hospital check-in", () => {
     expect(relay.outbox.at(-1)?.message.text).toMatch(/doesn't look like a hospital/);
   });
 
-  it("tells them to stop an old share so the location button can be sent again", async () => {
+  it("uses an existing share without asking them to stop it", async () => {
     const { relay, send } = setup();
     relay.locationResult = "already_sharing";
     await send({ text: "hi", chatId: "chat_1" });
     await send({ kind: "button", buttonId: "CONSENT_YES" });
     await send({ text: "fn_pat_demo_001" });
     expect(relay.locationRequests).toEqual(["chat_1"]);
-    expect(relay.outbox.at(-1)?.message.text).toMatch(/Stop the location share/);
+    expect(relay.outbox.map((m) => m.message.text).join("\n")).not.toMatch(/Stop the location share/);
 
     relay.locationResult = "sent";
     await send({ locationShare: "ended" });

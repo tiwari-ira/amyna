@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from starlette.concurrency import run_in_threadpool
 
 from claimshield_contracts.api import HandoffIn, VoiceEventIn, VoiceEventResult, VoiceStartIn
@@ -91,6 +91,32 @@ async def xai_incoming_call_webhook(
         actor="service:telnyx",
     )
     return {"received": True}
+
+
+@router.get("/recordings/{token}.mp3", include_in_schema=False)
+def authorization_recording(
+    token: str, container: Container = Depends(get_container)
+) -> Response:
+    """The patient's authorization memo for Telnyx playback (token per call, live calls only)."""
+    from ..services import recording_service
+
+    if len(token) > 100:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    with container.session_scope() as db:
+        audio = recording_service.audio_for_token(db, token)
+    if audio is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return Response(
+        content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"}
+    )
+
+
+@router.get("/media/silence.wav", include_in_schema=False)
+def hold_silence() -> Response:
+    """Silent hold audio for the AI leg while the patient speaks (instead of hold music)."""
+    from ..services.recording_service import silence_wav
+
+    return Response(content=silence_wav(), media_type="audio/wav")
 
 
 def _header(headers: dict[str, str], name: str) -> str | None:

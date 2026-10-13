@@ -39,8 +39,8 @@ export interface Conversation {
   chatId?: string;
   /** Set once they agree to health-record access, before a case exists to store it on. */
   healthConsentGiven?: boolean;
-  /** Signed URL of the account-authorization voice memo. Never log it. */
-  accountConsentAudioUrl?: string;
+  /** The account-authorization voice memo, kept locally until Core has it. */
+  authorizationMemo?: { path: string; mimeType: string; uploaded?: boolean };
   locationAsked?: boolean;
   locationSharing?: boolean;
   wantRecording?: boolean;

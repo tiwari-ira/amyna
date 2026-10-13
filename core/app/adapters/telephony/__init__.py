@@ -22,6 +22,7 @@ def build_telephony(settings: Settings) -> TelephonyAdapter:
             public_base_url=settings.public_base_url,
             allowed=allowed,
             fallbacks=settings.telnyx_fallback_profiles(),
+            voicemail_detection=settings.telephony_voicemail_detection,
         )
     from .mock import MockTelephony
 

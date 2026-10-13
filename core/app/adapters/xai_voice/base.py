@@ -12,6 +12,9 @@ from typing import Any, Protocol
 from claimshield_contracts.enums import TurnAction
 from claimshield_contracts.tool_api import DisputeCaseView
 
+RESUME_VERIFIED = "verified"
+RESUME_UNREACHABLE = "unreachable"
+
 
 @dataclass(frozen=True)
 class TurnDecision:
@@ -72,8 +75,15 @@ class VoiceAdapter(ABC):
         """Begin the conversation. Mock runs synchronously until paused or ended."""
 
     @abstractmethod
-    def resume_session(self, call_id: str, handler: VoiceEventHandler) -> None:
-        """Continue after a human resolved the pause."""
+    def resume_session(
+        self, call_id: str, handler: VoiceEventHandler, note: str = RESUME_VERIFIED
+    ) -> None:
+        """Continue after the pause. ``note``: RESUME_VERIFIED (the member handled it)
+        or RESUME_UNREACHABLE (the member could not be connected)."""
+
+    def start_speaking(self, call_id: str) -> None:
+        """The AI leg is now audible to the insurer: greet. Default: no-op."""
+        return None
 
     @abstractmethod
     def pause_session(self, call_id: str) -> None:

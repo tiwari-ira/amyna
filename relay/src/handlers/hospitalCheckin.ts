@@ -48,7 +48,6 @@ export async function askForLocation(ctx: HandlerContext, convo: Conversation): 
     if (result === "already_sharing") {
       convo.locationSharing = true;
       watchLiveLocation(ctx, convo.userId);
-      await say(ctx, convo, copy.locationAlreadySharing);
       await checkCoordinates(ctx, convo, await ctx.relay.readLocation(convo.chatId), false);
     }
   } catch (error) {

@@ -21,7 +21,7 @@ from claimshield_contracts.tool_api import DisputeCaseView
 
 from ...services.notification_service import format_cents
 from ...services.security_policy import HOLD_LINE
-from .base import VoiceAdapter, VoiceEventHandler, VoiceSessionConfig
+from .base import RESUME_VERIFIED, VoiceAdapter, VoiceEventHandler, VoiceSessionConfig
 from .dispatcher import CONTROL_KEY, CONTROL_PAUSE
 
 MOCK_REFERENCE = "MOCK-REF-48213"
@@ -81,6 +81,10 @@ class _MockCall:
     paused: bool = False
     ended: bool = False
     facts: dict[str, Any] = field(default_factory=dict)
+    # A resume requested while the script is mid-turn (e.g. the patient could not
+    # be reached during the same callback) continues in the running loop.
+    running: bool = False
+    resume_pending: bool = False
 
 
 class MockVoiceAdapter(VoiceAdapter):
@@ -98,11 +102,16 @@ class MockVoiceAdapter(VoiceAdapter):
             self._calls[config.call_id] = call
         self._run(call, handler)
 
-    def resume_session(self, call_id: str, handler: VoiceEventHandler) -> None:
+    def resume_session(
+        self, call_id: str, handler: VoiceEventHandler, note: str = RESUME_VERIFIED
+    ) -> None:
         call = self._calls.get(call_id)
         if call is None:
             raise RuntimeError(f"Unknown mock call {call_id} (was Core restarted mid-call?)")
         call.paused = False
+        if call.running:
+            call.resume_pending = True
+            return
         self._run(call, handler)
 
     def pause_session(self, call_id: str) -> None:
@@ -116,6 +125,22 @@ class MockVoiceAdapter(VoiceAdapter):
     # ------------------------------------------------------------------ internals
 
     def _run(self, call: _MockCall, handler: VoiceEventHandler) -> None:
+        call.running = True
+        try:
+            self._loop(call, handler)
+        finally:
+            call.running = False
+
+    def _hold_or_continue(self, call: _MockCall) -> bool:
+        """After a pause: True to keep talking (a resume already arrived)."""
+        if call.resume_pending:
+            call.resume_pending = False
+            call.paused = False
+            return True
+        call.paused = True
+        return False
+
+    def _loop(self, call: _MockCall, handler: VoiceEventHandler) -> None:
         call_id = call.config.call_id
         while not call.paused and not call.ended and call.cursor < len(call.script):
             line = call.script[call.cursor]
@@ -123,11 +148,12 @@ class MockVoiceAdapter(VoiceAdapter):
             decision = handler.on_insurer_utterance(call_id, line.text)
             if decision.action == TurnAction.PAUSE_FOR_HUMAN:
                 handler.on_agent_utterance(call_id, decision.say or HOLD_LINE)
-                call.paused = True
+                if self._hold_or_continue(call):
+                    continue
                 return
             reply = self._agent_reply(call, line, handler)
             handler.on_agent_utterance(call_id, reply)
-            if call.paused:
+            if call.paused and not self._hold_or_continue(call):
                 return
         if not call.paused and not call.ended:
             call.ended = True

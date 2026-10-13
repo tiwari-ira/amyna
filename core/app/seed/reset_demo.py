@@ -34,6 +34,7 @@ from ..config import get_settings  # noqa: E402
 from ..demo_support import create_demo_visit, service_headers  # noqa: E402
 from ..main import create_app  # noqa: E402
 from ..models_db import (  # noqa: E402
+    AuthorizationRecordingRow,
     CallRow,
     CaseRow,
     ClaimLineRow,
@@ -59,6 +60,7 @@ _BY_CASE_ID = (
     NotificationRow,
     CallRow,
     DisputeRow,
+    AuthorizationRecordingRow,
 )
 
 

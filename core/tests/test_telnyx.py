@@ -172,8 +172,37 @@ def test_transfer_to_sip_targets_xai_and_carries_the_call_id() -> None:
     _adapter(handler).transfer_to_sip("cc_1", "call_123")
     assert captured["path"] == "/v2/calls/cc_1/actions/transfer"
     assert captured["body"]["to"] == "sip:test@sip.x.ai"
-    assert captured["body"]["headers"] == [{"name": "X-Amyna-Call-Id", "value": "call_123"}]
+    assert captured["body"]["custom_headers"] == [
+        {"name": "X-Amyna-Call-Id", "value": "call_123"}
+    ]
     assert from_client_state(captured["body"]["client_state"]) == "call_123"
+
+
+def test_dial_turns_on_voicemail_detection() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"data": {"call_control_id": "cc_1"}})
+
+    _adapter(handler).dial("call_123", "+15555550100")
+    assert captured["body"]["answering_machine_detection"] == "detect"
+
+
+def test_the_ai_leg_dials_xai_with_its_own_client_state() -> None:
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(200, json={"data": {"call_control_id": "cc_ai"}})
+
+    result = _adapter(handler).dial_assistant("call_123")
+    body = captured["body"]
+    assert result.provider_call_ref == "cc_ai"
+    assert body["to"] == "sip:test@sip.x.ai"
+    assert body["custom_headers"] == [{"name": "X-Amyna-Call-Id", "value": "call_123"}]
+    assert from_client_state(body["client_state"]) == "call_123:ai"
+    assert "answering_machine_detection" not in body
 
 
 def test_hangup_posts_the_action() -> None:
@@ -260,22 +289,26 @@ def test_webhook_answered_is_ignored_in_mock_mode(tmp_path: Path, telnyx_keys) -
     assert response.json() == {"received": False}
 
 
-def test_webhook_answered_bridges_the_insurer_leg_to_xai(
+def test_webhook_answered_starts_the_voicemail_check(
     tmp_path: Path, telnyx_keys, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The AI is not connected yet: first Telnyx says whether a person answered."""
     signing_key, public_key = telnyx_keys
     app = build_isolated_app(tmp_path / "core.db", telnyx_public_key=public_key)
+    _seeded_call(app, status="in_progress")
     captured = _stub_live_telephony(app, monkeypatch)
     body = _event_body(
         "call.answered",
         to="+15555550100",
-        call_control_id="cc_1",
+        call_control_id="cc_insurer",
         client_state=to_client_state("call_123"),
     )
     response = _post_event(app, signing_key, body)
     assert response.status_code == 200
     assert response.json() == {"received": True}
-    assert captured["path"] == "/v2/calls/cc_1/actions/transfer"  # the SIP bridge
+    assert "path" not in captured  # nothing sent to Telnyx yet
+    with app.state.container.session_scope() as db:
+        assert db.get(CallRow, "call_123").media_phase == "screening"
 
 
 def test_webhook_ignores_the_xai_sip_leg(
@@ -316,17 +349,17 @@ def test_webhook_hangup_for_an_unknown_call_is_ignored(tmp_path: Path, telnyx_ke
 def test_webhook_without_verification_accepts_unsigned_events(tmp_path, monkeypatch):
     """TELNYX_WEBHOOK_VERIFY=false: no public key, a bad signature still processes."""
     app = build_isolated_app(tmp_path / "core.db", telnyx_webhook_verify=False)
-    captured = _stub_live_telephony(app, monkeypatch)
+    _seeded_call(app, status="in_progress")
+    _stub_live_telephony(app, monkeypatch)
     body = _event_body(
         "call.answered",
         to="+15555550100",
-        call_control_id="cc_1",
+        call_control_id="cc_insurer",
         client_state=to_client_state("call_123"),
     )
     response = _post_event(app, SigningKey.generate(), body)  # signature ignored
     assert response.status_code == 200
     assert response.json() == {"received": True}
-    assert captured["path"] == "/v2/calls/cc_1/actions/transfer"
 
 
 def test_webhook_without_verification_rejects_malformed_json(tmp_path):
@@ -400,11 +433,12 @@ def test_rotation_raises_when_every_profile_is_exhausted() -> None:
 # ------------------------------------------------------------------ human leg webhooks
 
 
-def _seeded_call(app) -> None:  # parents first, one commit each (SQLite FK order)
+def _seeded_call(app, *, status: str = "paused_for_human", **call: object) -> None:
+    """One case + call (parents first, one commit each: SQLite FK order)."""
     rows = [
         CaseRow(
             id="case_x",
-            state="HUMAN_REQUIRED",
+            state="HUMAN_REQUIRED" if status == "paused_for_human" else "CALL_IN_PROGRESS",
             channel="relay",
             finchnode_patient_id="fn_pat_demo_001",
         ),
@@ -430,9 +464,10 @@ def _seeded_call(app) -> None:  # parents first, one commit each (SQLite FK orde
             id="call_123",
             case_id="case_x",
             dispute_id="dsp_x",
-            status="paused_for_human",
+            status=status,
             provider_call_ref="cc_insurer",
             turns=[],
+            **call,
         ),
     ]
     for row in rows:
@@ -440,12 +475,18 @@ def _seeded_call(app) -> None:  # parents first, one commit each (SQLite FK orde
             db.add(row)
 
 
-def test_human_leg_answered_is_bridged_into_the_insurer_call(
+def test_human_leg_answered_joins_the_conference(
     tmp_path: Path, telnyx_keys, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The patient joins the SAME call: the AI is held first, then the patient joins."""
     signing_key, public_key = telnyx_keys
     app = build_isolated_app(tmp_path / "core.db", telnyx_public_key=public_key)
-    _seeded_call(app)
+    _seeded_call(
+        app,
+        conference_ref="conf_1",
+        ai_leg_ref="cc_ai",
+        merge_phase="patient_being_connected",
+    )
     captured = _stub_live_telephony(app, monkeypatch)
     body = _event_body(
         "call.answered",
@@ -455,10 +496,12 @@ def test_human_leg_answered_is_bridged_into_the_insurer_call(
     )
     response = _post_event(app, signing_key, body)
     assert response.json() == {"received": True}
-    assert captured["path"] == "/v2/calls/cc_human/actions/bridge"
-    assert captured["body"]["bridge_call_control_id"] == "cc_insurer"
+    assert captured["path"] == "/v2/conferences/conf_1/actions/join"
+    assert captured["body"]["call_control_id"] == "cc_human"
     with app.state.container.session_scope() as db:
-        assert db.get(CallRow, "call_123").human_call_ref == "cc_human"
+        call = db.get(CallRow, "call_123")
+        assert call.human_call_ref == "cc_human"
+        assert call.merge_phase == "patient_connected_with_human"
 
 
 def test_human_leg_hangup_releases_the_merge_without_ending_the_call(

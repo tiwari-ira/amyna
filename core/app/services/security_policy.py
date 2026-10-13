@@ -208,7 +208,7 @@ SAFE_FALLBACK_LINE = (
 )
 HOLD_LINE = (
     "I'm not able to provide that information. The member will verify their identity "
-    "with you directly. Please hold for a moment."
+    "with you directly. Please hold for a moment while I connect them."
 )
 
 

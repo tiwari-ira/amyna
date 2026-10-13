@@ -22,6 +22,7 @@ from ..db import utcnow
 from ..errors import Conflict, Forbidden, InvalidInput, NotFound
 from ..mappers import dump_all
 from ..models_db import DecisionRow, DisputeRow, EvidenceRow, FindingRow
+from ..names import spoken_name
 from . import notification_service
 from .case_service import DISPUTABLE, get_case_row, latest_dispute, transition
 from .claim_service import claim_lines, get_case_claim_row
@@ -225,7 +226,7 @@ def dispute_case_view(db: Session, case_id: str) -> DisputeCaseView:
     return DisputeCaseView(
         case_id=case.id,
         case_state=CaseState(case.state),
-        patient_display_name=case.patient_display_name,
+        patient_display_name=spoken_name(case.patient_display_name),
         member_ref_masked=mask_member_ref(case.member_ref),
         payer_name=case.payer_name,
         claim_number=claim.external_claim_id if claim else None,

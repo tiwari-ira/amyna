@@ -96,6 +96,12 @@ export class StubCore implements CoreApi {
   async finchnodeClaims() {
     return { claims: this.bills, complete: true } as Schemas["FinchNodeClaims"];
   }
+  recordings: { caseId: string; mimeType: string; bytes: number }[] = [];
+  async putAuthorizationRecording(caseId: string, body: { audio_base64: string; mime_type: string }) {
+    const bytes = Buffer.from(body.audio_base64, "base64").byteLength;
+    this.recordings.push({ caseId, mimeType: body.mime_type, bytes });
+    return { stored: true, size_bytes: bytes };
+  }
   async setCallbackPhone(_caseId: string, phone: string) {
     if (phone.replace(/\D/g, "").length < 10) throw new CoreError(422, "invalid_phone", "bad number");
     this.phone = phone;
