@@ -300,6 +300,47 @@
         "title": "AuthSessionResult",
         "type": "object"
       },
+      "AuthorizationRecordingIn": {
+        "description": "The patient's spoken authorization memo (base64 audio, as Relay received it).",
+        "properties": {
+          "audio_base64": {
+            "maxLength": 8000000,
+            "minLength": 16,
+            "title": "Audio Base64",
+            "type": "string"
+          },
+          "mime_type": {
+            "maxLength": 64,
+            "minLength": 3,
+            "title": "Mime Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "audio_base64",
+          "mime_type"
+        ],
+        "title": "AuthorizationRecordingIn",
+        "type": "object"
+      },
+      "AuthorizationRecordingOut": {
+        "properties": {
+          "size_bytes": {
+            "title": "Size Bytes",
+            "type": "integer"
+          },
+          "stored": {
+            "title": "Stored",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "stored",
+          "size_bytes"
+        ],
+        "title": "AuthorizationRecordingOut",
+        "type": "object"
+      },
       "CallMergePhase": {
         "description": "First-class lifecycle of the immediate human merge on a paused call (17A).\n\nSENSITIVE_REQUEST_DETECTED -> PATIENT_BEING_CONNECTED -> PATIENT_CONNECTED\n-> PATIENT_HANDLING_VERIFICATION -> PATIENT_RELEASED -> AI_RESUMING.\nMERGE_FAILED is the explicit failure escape (the AI is never auto-resumed).",
         "enum": [
@@ -1406,6 +1447,18 @@
       },
       "Dispute": {
         "properties": {
+          "approved_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          },
           "case_id": {
             "title": "Case Id",
             "type": "string"
@@ -5096,6 +5149,49 @@
         ]
       }
     },
+    "/auth/revoke": {
+      "post": {
+        "description": "Log out: revoke the patient session named by its own token.\n\nSelf-service by construction -- the token (and only the token) identifies\nthe session, so a leaked token can be neutralized by its owner at any time.\nAlways 204: the result does not reveal whether a session existed.",
+        "operationId": "revoke_auth_revoke_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-Amyna-Patient-Token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Amyna-Patient-Token"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/auth/session": {
       "post": {
         "description": "Issue an opaque patient session token (Relay handles: any environment).",
@@ -5231,6 +5327,64 @@
           }
         ],
         "summary": "Get Case",
+        "tags": [
+          "cases"
+        ]
+      }
+    },
+    "/cases/{case_id}/authorization-recording": {
+      "put": {
+        "description": "Store the memo that plays to the insurer when the call connects (converted to MP3).",
+        "operationId": "put_authorization_recording_cases__case_id__authorization_recording_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "case_id",
+            "required": true,
+            "schema": {
+              "title": "Case Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthorizationRecordingIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthorizationRecordingOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Put Authorization Recording",
         "tags": [
           "cases"
         ]
@@ -5402,7 +5556,7 @@
     },
     "/cases/{case_id}/notifications": {
       "get": {
-        "description": "Core's patient outbox (what the Relay service delivers / renders).",
+        "description": "Core's patient outbox (what the Relay service delivers / renders).\n\nWith ``since`` the poll transfers only the delta instead of the whole outbox.",
         "operationId": "get_notifications_cases__case_id__notifications_get",
         "parameters": [
           {
@@ -5412,6 +5566,24 @@
             "schema": {
               "title": "Case Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "ISO-8601 timestamp cursor ([3.2]): return only notifications created after it. The same-millisecond edge is the client's to dedup (Relay already does, by id).",
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO-8601 timestamp cursor ([3.2]): return only notifications created after it. The same-millisecond edge is the client's to dedup (Relay already does, by id).",
+              "title": "Since"
             }
           }
         ],
@@ -5600,7 +5772,7 @@
     },
     "/claims/{claim_id}/analyze": {
       "post": {
-        "description": "Run the Claim Agent logic (idempotent). `status=pending` in FETCH_MODE=agentverse.",
+        "description": "Run the Claim Agent logic (idempotent). `status=pending` (202) when the\nwork runs as a durable job (FETCH_MODE=agentverse, or AGENT_WORK_INLINE=false).",
         "operationId": "analyze_claim_claims__claim_id__analyze_post",
         "parameters": [
           {

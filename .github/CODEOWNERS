@@ -1,0 +1,23 @@
+# CODEOWNERS for Amyna (docs/BRANCH_WORKFLOW.md folder ownership).
+#
+# ACTIVATION: replace the @memberN placeholders below with real GitHub
+# usernames or team names, then enable "Require review from Code Owners"
+# in Settings -> Branches for `main`. Until then this file is inert
+# (every rule below is commented out on purpose: an unknown owner makes
+# GitHub reject the whole file).
+#
+# Ownership map:
+#   Member 1: core/, shared/, scripts/, docs/ and root files
+#   Member 2: relay/
+#   Member 3: fetch/
+#   Member 4: finchnode/ and intelligence/
+#
+# *              @member1
+# /relay/        @member2
+# /fetch/        @member3 @member4
+# /finchnode/    @member4
+# /intelligence/ @member4
+# /core/         @member1
+# /shared/       @member1
+# /scripts/      @member1
+# /docs/         @member1

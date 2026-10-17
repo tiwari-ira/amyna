@@ -45,13 +45,19 @@ class UserRow(Base):
 
 
 class PatientSessionRow(Base):
-    """Opaque session tokens for patient endpoints. Only the hash is stored."""
+    """Opaque session tokens for patient endpoints. Only the hash is stored.
+
+    [2.2] Sessions expire (sliding window, refreshed on each authenticated
+    request) and can be revoked: a leaked token is worthless after logout.
+    """
 
     __tablename__ = "patient_sessions"
 
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = _created()
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class FinchLinkRow(Base):
@@ -321,14 +327,17 @@ class AuthorizationRecordingRow(Base):
     """The patient's spoken authorization memo, converted for phone playback (MP3).
 
     PHI: served only through an unguessable token (only its hash is stored) and
-    only while the case has a live insurer call.
+    only while the case has a live insurer call. [2.3] With the encrypted-file
+    store the bytes live outside the DB (``storage_key`` names them; ``audio``
+    stays NULL), so database dumps and backups never carry spoken PHI.
     """
 
     __tablename__ = "authorization_recordings"
 
     id: Mapped[str] = mapped_column(ID, primary_key=True)
     case_id: Mapped[str] = mapped_column(ForeignKey("cases.id"), unique=True, index=True)
-    audio: Mapped[bytes] = mapped_column(LargeBinary)
+    audio: Mapped[bytes | None] = mapped_column(LargeBinary)
+    storage_key: Mapped[str | None] = mapped_column(String(120))
     mime_type: Mapped[str] = mapped_column(String(32))
     size_bytes: Mapped[int] = mapped_column(Integer)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
@@ -366,7 +375,12 @@ class NotificationRow(Base):
 
 
 class AuditRow(Base):
-    """Append-only audit trail. ``details`` is redacted before insert (audit.py)."""
+    """Append-only audit trail. ``details`` is redacted before insert (audit.py).
+
+    [3.2] Tamper-evident: each event links to the previous event of its case
+    (``prev_hash``) and carries its own ``entry_hash`` over the full record.
+    Editing or deleting any row breaks ``verify_audit_chain`` for that case.
+    """
 
     __tablename__ = "audit_events"
 
@@ -378,6 +392,8 @@ class AuditRow(Base):
     resource_type: Mapped[str | None] = mapped_column(String(40))
     resource_id: Mapped[str | None] = mapped_column(ID)
     details: Mapped[dict[str, Any]] = mapped_column(JSON)
+    prev_hash: Mapped[str | None] = mapped_column(String(64))
+    entry_hash: Mapped[str | None] = mapped_column(String(64))
 
 
 class JobRow(Base):

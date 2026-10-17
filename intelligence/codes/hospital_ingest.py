@@ -14,6 +14,7 @@ import json
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from decimal import ROUND_HALF_UP, Decimal
 from functools import cache
 from pathlib import Path
 
@@ -27,7 +28,9 @@ _CODE_TYPES = {"CPT": CodeSystem.CPT, "HCPCS": CodeSystem.HCPCS, "NDC": CodeSyst
 def _cents(value: str | float | None) -> int | None:
     if value in (None, ""):
         return None
-    return round(float(value) * 100)
+    # Exact decimal cents (mirrors finchnode.normalize.to_cents): a float
+    # round() can drift a cent on *.005 gross charges.
+    return int(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) * 100)
 
 
 def normalize_hospital_name(name: str) -> str:

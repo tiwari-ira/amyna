@@ -78,9 +78,14 @@ async function processEvent(ctx: HandlerContext, event: InboundEvent, ledger: Ev
   } catch (error) {
     ledger.release(event.id); // a replayed copy may be handled again
     ctx.log(`could not handle ${event.kind} event: ${(error as Error).message}`);
-    await say(ctx, ctx.store.get(event.from), copy.tryAgain).catch((sendError: Error) =>
-      ctx.log(`could not tell the patient: ${sendError.message}`),
-    );
+    // Only tell the patient when a conversation already exists: get() would
+    // persist an orphan record for any sender that fails before onboarding.
+    const convo = ctx.store.peek(event.from);
+    if (convo) {
+      await say(ctx, convo, copy.tryAgain).catch((sendError: Error) =>
+        ctx.log(`could not tell the patient: ${sendError.message}`),
+      );
+    }
   }
 }
 

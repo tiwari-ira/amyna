@@ -50,4 +50,7 @@ def build_dispute_agent(
 
 
 if __name__ == "__main__":
+    from claimshield_contracts.agent_messages import verify_digest_lock
+
+    verify_digest_lock()  # [2.5] refuse to serve on protocol drift
     build_dispute_agent().run()

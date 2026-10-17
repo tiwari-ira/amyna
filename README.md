@@ -151,13 +151,23 @@ See [docs/SETUP_KEYS.md](docs/SETUP_KEYS.md) for the full list. The main ones:
 `TELNYX_WEBHOOK_VERIFY` (must be `true` outside dev/test), and the
 `TELEPHONY_ALLOWED_NUMBERS` payer-phone allowlist (Core dials nothing else).
 
+Production-only hardening (see docs/SECURITY.md): `AGENT_WORK_INLINE=false`
+(agent work runs as durable jobs), one token per agent
+(`ORCHESTRATOR/VISIT_AGENT/CLAIM_AGENT/DISPUTE_AGENT_SERVICE_TOKEN`),
+`AUTHORIZATION_AUDIO_STORE=file` + `RECORDING_ENCRYPTION_KEY` (spoken
+authorizations encrypted outside the database), and `RATE_LIMIT_PER_MINUTE`
+(per-IP request cap with an auth-failure circuit).
+
 ## Testing
 
 * `make test` — 300+ Python tests (unit, state machine, security policy,
   migrations, assistant, identity, jobs/metrics, failure matrix, offline Bureau
-  uAgents) + 43 Relay vitest tests, all deterministic/offline.
+  uAgents) + 70+ Relay vitest tests, all deterministic/offline.
 * `make smoke` — full mock end-to-end through the real Core HTTP API.
 * `make lint` — ruff + TS type-check.
+* On Windows, the same targets work without bash/WSL:
+  `powershell -ExecutionPolicy Bypass -File scripts\tasks.ps1 <target>`
+  (e.g. `test`, `smoke`, `lint`, `contracts`, `mypy-gate`).
 * Failure coverage includes duplicate webhooks/approvals/calls, wrong case ids,
   malicious agent senders, partial specialist runs, revocations, Relay/Agentverse/
   Telnyx/xAI outages, ambiguous identity, unreachable-patient merge timeouts,

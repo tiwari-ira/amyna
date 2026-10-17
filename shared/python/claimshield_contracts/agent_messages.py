@@ -307,6 +307,42 @@ def schema_digests() -> dict[str, str]:
     return {m.__name__: AgentModel.build_schema_digest(m) for m in ALL_MESSAGES}
 
 
+class ProtocolDriftError(RuntimeError):
+    """The running code's message schemas do not match the committed digest lock.
+
+    uAgents routes messages by schema digest: a version-skewed agent silently
+    drops every message it cannot recognize. Startup attestation ([2.5]) turns
+    that silent failure into a loud one before the agent serves any traffic.
+    """
+
+
+def verify_digest_lock(path: Path = DIGEST_LOCK_PATH) -> dict[str, str]:
+    """Attest at startup that the code's digests match the committed lock.
+
+    Raises ProtocolDriftError naming the drifted messages (and how to fix it);
+    returns the verified digests on success.
+    """
+    lock = json.loads(path.read_text(encoding="utf-8"))
+    if lock.get("agent_protocol_version") != AGENT_PROTOCOL_VERSION:
+        raise ProtocolDriftError(
+            "AGENT_PROTOCOL_VERSION "
+            f"{AGENT_PROTOCOL_VERSION} does not match the digest lock's "
+            f"{lock.get('agent_protocol_version')!r}. Bump the version in version.py "
+            "and regenerate the lock, then restart all agents together."
+        )
+    expected = schema_digests()
+    drifted = sorted(
+        name for name in expected if lock.get("digests", {}).get(name) != expected[name]
+    )
+    if drifted:
+        raise ProtocolDriftError(
+            f"Message schemas drifted from the digest lock: {', '.join(drifted)}. "
+            "Bump AGENT_PROTOCOL_VERSION in version.py and regenerate the lock "
+            "(write_digest_lock()), then restart all agents together."
+        )
+    return expected
+
+
 def write_digest_lock(path: Path = DIGEST_LOCK_PATH) -> None:
     """Regenerate the digest lock file after an intentional protocol change."""
     payload = {"agent_protocol_version": AGENT_PROTOCOL_VERSION, "digests": schema_digests()}

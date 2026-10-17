@@ -2,9 +2,10 @@
 
 import logging
 import re
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from claimshield_contracts.enums import (
@@ -269,10 +270,6 @@ def enrich_patient(db: Session, container: "Container", case: CaseRow) -> None:
 # --------------------------------------------------------------------------- transitions
 
 
-def _count(db: Session, model: type, *conditions: object) -> int:
-    return int(db.scalar(select(func.count()).select_from(model).where(*conditions)) or 0)
-
-
 def latest_dispute(db: Session, case_id: str) -> DisputeRow | None:
     stmt = (
         select(DisputeRow)
@@ -283,46 +280,81 @@ def latest_dispute(db: Session, case_id: str) -> DisputeRow | None:
     return db.scalars(stmt).first()
 
 
+def _guard_counts_subquery(model: type, *conditions: object):
+    """A scalar-subquery COUNT for the single-statement guard context."""
+    return select(func.count()).select_from(model).where(*conditions).scalar_subquery()
+
+
 def build_guard_context(db: Session, case: CaseRow) -> GuardContext:
-    """Collect the facts the state-machine guards check."""
-    dispute = latest_dispute(db, case.id)
-    has_transcript = bool(
-        db.scalar(
-            select(
-                exists()
-                .where(TranscriptRow.visit_id == VisitRow.id)
-                .where(VisitRow.case_id == case.id)
-            )
-        )
+    """Collect the facts the state-machine guards check.
+
+    One statement instead of nine: guards run on every transition and some
+    requests transition twice, so this is the hottest read path in Core.
+    The scalar subqueries mirror the old per-fact COUNT/EXISTS queries.
+    """
+    dispute_status = (
+        select(DisputeRow.status)
+        .where(DisputeRow.case_id == case.id)
+        .order_by(DisputeRow.created_at.desc())
+        .limit(1)
+        .scalar_subquery()
     )
-    return GuardContext(
-        has_visit=_count(db, VisitRow, VisitRow.case_id == case.id) > 0,
-        has_transcript=has_transcript,
-        has_claim=_count(db, ClaimRow, ClaimRow.case_id == case.id) > 0,
-        findings_count=_count(db, FindingRow, FindingRow.case_id == case.id),
-        open_confirmation_count=_count(
-            db,
-            InterventionRow,
-            InterventionRow.case_id == case.id,
-            InterventionRow.reason == HumanReason.PATIENT_CONFIRMATION.value,
-            InterventionRow.status == InterventionStatus.OPEN.value,
-        ),
-        disputable_findings_count=_count(
-            db, FindingRow, FindingRow.case_id == case.id, FindingRow.status.in_(DISPUTABLE)
-        ),
-        dispute_status=DisputeStatus(dispute.status) if dispute else None,
-        patient_authorization_id=dispute.patient_authorization_id if dispute else None,
-        open_call_interventions=_count(
-            db,
-            InterventionRow,
-            InterventionRow.case_id == case.id,
-            InterventionRow.call_id.is_not(None),
-            InterventionRow.status == InterventionStatus.OPEN.value,
-        ),
-        has_insurer_response=_count(
-            db, CallRow, CallRow.case_id == case.id, CallRow.insurer_response.is_not(None)
+    patient_authorization_id = (
+        select(DisputeRow.patient_authorization_id)
+        .where(DisputeRow.case_id == case.id)
+        .order_by(DisputeRow.created_at.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    has_transcript = (
+        select(func.count())
+        .select_from(TranscriptRow)
+        .where(TranscriptRow.visit_id == VisitRow.id)
+        .where(VisitRow.case_id == case.id)
+        .scalar_subquery()
+    )
+    row = db.execute(
+        select(
+            _guard_counts_subquery(VisitRow, VisitRow.case_id == case.id).label("visits"),
+            has_transcript.label("transcripts"),
+            _guard_counts_subquery(ClaimRow, ClaimRow.case_id == case.id).label("claims"),
+            _guard_counts_subquery(FindingRow, FindingRow.case_id == case.id).label("findings"),
+            _guard_counts_subquery(
+                InterventionRow,
+                InterventionRow.case_id == case.id,
+                InterventionRow.reason == HumanReason.PATIENT_CONFIRMATION.value,
+                InterventionRow.status == InterventionStatus.OPEN.value,
+            ).label("open_confirmations"),
+            _guard_counts_subquery(
+                FindingRow, FindingRow.case_id == case.id, FindingRow.status.in_(DISPUTABLE)
+            ).label("disputable"),
+            _guard_counts_subquery(
+                InterventionRow,
+                InterventionRow.case_id == case.id,
+                InterventionRow.call_id.is_not(None),
+                InterventionRow.status == InterventionStatus.OPEN.value,
+            ).label("open_call_interventions"),
+            _guard_counts_subquery(
+                CallRow,
+                CallRow.case_id == case.id,
+                CallRow.insurer_response.is_not(None),
+            ).label("calls_with_response"),
+            dispute_status.label("dispute_status"),
+            patient_authorization_id.label("patient_authorization_id"),
         )
-        > 0,
+    ).one()
+    status = row.dispute_status
+    return GuardContext(
+        has_visit=row.visits > 0,
+        has_transcript=row.transcripts > 0,
+        has_claim=row.claims > 0,
+        findings_count=row.findings,
+        open_confirmation_count=row.open_confirmations,
+        disputable_findings_count=row.disputable,
+        dispute_status=DisputeStatus(status) if status else None,
+        patient_authorization_id=row.patient_authorization_id,
+        open_call_interventions=row.open_call_interventions,
+        has_insurer_response=row.calls_with_response > 0,
     )
 
 
@@ -427,11 +459,15 @@ def timeline(db: Session, case_id: str) -> list[TimelineEvent]:
     return sorted(events, key=lambda e: e.at)
 
 
-def list_notifications(db: Session, case_id: str) -> list[NotificationRow]:
+def list_notifications(
+    db: Session, case_id: str, *, since: datetime | None = None
+) -> list[NotificationRow]:
     get_case_row(db, case_id)
     stmt = (
         select(NotificationRow)
         .where(NotificationRow.case_id == case_id)
         .order_by(NotificationRow.created_at)
     )
+    if since is not None:
+        stmt = stmt.where(NotificationRow.created_at > since)
     return list(db.scalars(stmt))

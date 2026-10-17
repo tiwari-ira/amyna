@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from claimshield_contracts.api import ClaimAnalysisResult, ClaimIngest
+from claimshield_contracts.enums import WorkStatus
 from claimshield_contracts.models import Claim
 
 from ..auth import ServiceIdentity, require_scopes
@@ -50,10 +51,15 @@ def get_claim(
 def analyze_claim(
     claim_id: str,
     request: Request,
+    response: Response,
     identity: ServiceIdentity = Depends(require_scopes("claims:analyze")),
     container: Container = Depends(get_container),
 ) -> ClaimAnalysisResult:
-    """Run the Claim Agent logic (idempotent). `status=pending` in FETCH_MODE=agentverse."""
+    """Run the Claim Agent logic (idempotent). `status=pending` (202) when the
+    work runs as a durable job (FETCH_MODE=agentverse, or AGENT_WORK_INLINE=false)."""
     with container.session_scope() as db:
         guard_case(db, request, identity, claim=claim_id)
-    return workflows.analyze_claim(container, claim_id=claim_id)
+    result = workflows.analyze_claim(container, claim_id=claim_id)
+    if result.status == WorkStatus.PENDING:
+        response.status_code = status.HTTP_202_ACCEPTED
+    return result

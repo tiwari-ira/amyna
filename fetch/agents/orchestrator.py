@@ -98,7 +98,9 @@ def build_orchestrator(
         publish_agent_details=publish,
     )
     client = tools or CoreClient(
-        settings.core_base_url, settings.fetch_token, agent=AgentName.ORCHESTRATOR
+        settings.core_base_url,
+        settings.token_for("orchestrator_agent"),
+        agent=AgentName.ORCHESTRATOR,
     )
     brain = ChatOrchestrator(client, timeout_s=settings.request_timeout_s)
     routes = addresses or {
@@ -212,4 +214,7 @@ def build_orchestrator(
 
 
 if __name__ == "__main__":
+    from claimshield_contracts.agent_messages import verify_digest_lock
+
+    verify_digest_lock()  # [2.5] refuse to serve on protocol drift
     build_orchestrator().run()

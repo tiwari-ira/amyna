@@ -1,5 +1,11 @@
-/** Per-patient conversation state, persisted to a JSON file (survives restarts). */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+/** Per-patient conversation state, persisted to an append-only JSONL journal.
+ *
+ * save() used to rewrite every conversation on every message (~8ms at 5k
+ * patients); now it appends one line per *changed* conversation and compacts
+ * lazily. On load the last record per user wins. The legacy whole-array JSON
+ * file is still imported on first read.
+ */
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 export type Stage =
@@ -59,15 +65,39 @@ export interface Conversation {
   insurerCallAsked?: boolean;
   /** Core notifications already shown to the patient (rendered exactly once). */
   delivered: Record<string, DeliveredNotification>;
+  /** [3.2] Polling cursor: newest notification created_at we have already seen. */
+  lastNotificationAt?: string;
 }
 
 export class ConversationStore {
   private readonly conversations = new Map<string, Conversation>();
+  /** The exact JSON last persisted per user, to detect actual changes. */
+  private readonly savedJson = new Map<string, string>();
+  private dirtyOps = 0;
+  private static readonly COMPACT_EVERY = 512;
 
   constructor(private readonly path?: string) {
     if (path && existsSync(path)) {
-      const stored = JSON.parse(readFileSync(path, "utf8")) as Conversation[];
-      for (const convo of stored) this.conversations.set(convo.userId, convo);
+      const raw = readFileSync(path, "utf8").trim();
+      if (raw.startsWith("[")) {
+        // Legacy format: the whole file was one JSON array of conversations.
+        const stored = JSON.parse(raw) as Conversation[];
+        for (const convo of stored) {
+          this.conversations.set(convo.userId, convo);
+          this.savedJson.set(convo.userId, JSON.stringify(convo));
+        }
+      } else {
+        for (const line of raw.split("\n")) {
+          if (!line) continue;
+          try {
+            const convo = JSON.parse(line) as Conversation;
+            this.conversations.set(convo.userId, convo);
+            this.savedJson.set(convo.userId, line);
+          } catch {
+            // A torn last line (crash mid-append) is ignored.
+          }
+        }
+      }
     }
   }
 
@@ -77,6 +107,11 @@ export class ConversationStore {
     const fresh: Conversation = { userId, stage: "new", delivered: {} };
     this.conversations.set(userId, fresh);
     return fresh;
+  }
+
+  /** Look up a conversation without creating one (unknown senders stay unknown). */
+  peek(userId: string): Conversation | undefined {
+    return this.conversations.get(userId);
   }
 
   byCase(caseId: string): Conversation | undefined {
@@ -91,6 +126,21 @@ export class ConversationStore {
   save(): void {
     if (!this.path) return;
     mkdirSync(dirname(this.path), { recursive: true });
-    writeFileSync(this.path, JSON.stringify([...this.conversations.values()], null, 2));
+    for (const convo of this.conversations.values()) {
+      const json = JSON.stringify(convo);
+      if (this.savedJson.get(convo.userId) === json) continue;
+      appendFileSync(this.path, json + "\n");
+      this.savedJson.set(convo.userId, json);
+      this.dirtyOps += 1;
+    }
+    if (this.dirtyOps >= ConversationStore.COMPACT_EVERY) this.compact();
+  }
+
+  /** One snapshot line per conversation, dropping per-version history. */
+  private compact(): void {
+    this.dirtyOps = 0;
+    if (!this.path) return;
+    const body = [...this.conversations.values()].map((c) => JSON.stringify(c)).join("\n");
+    writeFileSync(this.path, body ? body + "\n" : "");
   }
 }

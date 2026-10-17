@@ -107,8 +107,9 @@ REDACTED_TURN = "[redacted: sensitive information]"
 INSURER_HUNG_UP = "ended by Telnyx"
 VOICEMAIL_REASON = "voicemail"
 ASSISTANT_FAILED_PREFIX = "assistant unavailable"
-# After a sensitive request is handled, repeats within this window do not pause or
-# dial again (the live call re-dialed when the model asked a second time).
+# After a sensitive request is handled, repeats of the SAME KIND within this
+# window do not pause or dial again (the live call re-dialed when the model
+# asked a second time). A different kind of sensitive request still pauses.
 HANDLED_COOLDOWN_S = 120
 _PATIENT_ON_CALL = (
     CallMergePhase.PATIENT_CONNECTED.value,
@@ -197,6 +198,25 @@ class VoiceCallManager:
     def __init__(self, container: "Container") -> None:
         self._c = container
         self._backend = VoiceToolsBackend(container)
+        # [1.6] Per-call AllowedFacts cache, keyed on the case row's updated_at:
+        # every findings/dispute mutation transitions the case (bumping updated_at),
+        # so a matching timestamp means the facts cannot have changed. Entries are
+        # dropped when the call ends; the map is hard-capped as a backstop.
+        self._facts_cache: dict[str, tuple[object, AllowedFacts]] = {}
+
+    _FACTS_CACHE_MAX = 128
+
+    def _allowed_facts(self, db: Session, call: CallRow):
+        case = db.get(CaseRow, call.case_id)
+        version = case.updated_at if case is not None else None
+        cached = self._facts_cache.get(call.id)
+        if cached is not None and cached[0] == version:
+            return cached[1]
+        facts = AllowedFacts.from_view(dispute_case_view(db, call.case_id))
+        if len(self._facts_cache) >= self._FACTS_CACHE_MAX:
+            self._facts_cache.clear()
+        self._facts_cache[call.id] = (version, facts)
+        return facts
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -501,16 +521,24 @@ class VoiceCallManager:
         except Exception:
             log.exception("could not take the assistant off hold")
 
-    def _recently_handled(self, db: Session, call_id: str) -> bool:
-        """A sensitive request on this call was just handled (joined, or unreachable)."""
+    def _recently_handled(self, db: Session, call_id: str, reason: str | None = None) -> bool:
+        """A sensitive request of this kind was just handled (joined, or unreachable).
+
+        The window is per human-merge reason: repeating the same kind of request
+        right after the member handled it stays suppressed, but a *new kind*
+        (e.g. a card-number request after a handled SSN request) still pauses
+        the call. ``reason=None`` keeps the previous any-recent behaviour for
+        callers that cannot attribute a reason.
+        """
         since = utcnow() - timedelta(seconds=HANDLED_COOLDOWN_S)
-        rows = db.scalars(
-            select(InterventionRow.resolved_at).where(
-                InterventionRow.call_id == call_id,
-                InterventionRow.status != InterventionStatus.OPEN.value,
-                InterventionRow.resolved_at.is_not(None),
-            )
+        statement = select(InterventionRow.resolved_at).where(
+            InterventionRow.call_id == call_id,
+            InterventionRow.status != InterventionStatus.OPEN.value,
+            InterventionRow.resolved_at.is_not(None),
         )
+        if reason is not None:
+            statement = statement.where(InterventionRow.reason == reason)
+        rows = db.scalars(statement)
         return any(as_utc(at) >= since for at in rows)
 
     def _quiet_hangup(self, provider_call_ref: str | None) -> None:
@@ -575,8 +603,9 @@ class VoiceCallManager:
             _append_turn(call, CallSpeaker.INSURER, stored, flags)
             if sensitive is None or call.status != CallStatus.IN_PROGRESS.value:
                 return TurnDecision(action=TurnAction.CONTINUE)
-            if self._recently_handled(db, call_id):
-                # The member just handled this; the agent declines on its own (rule 3).
+            if self._recently_handled(db, call_id, sensitive.reason.value):
+                # The member just handled this kind of request; the agent
+                # declines on its own (rule 3).
                 return TurnDecision(action=TurnAction.CONTINUE)
             row = self._pause_for_human(
                 db,
@@ -596,9 +625,7 @@ class VoiceCallManager:
     def on_agent_utterance(self, call_id: str, text: str) -> GuardrailVerdict:
         with self._c.session_scope() as db:
             call = _get_call(db, call_id)
-            check = check_agent_utterance(
-                text, AllowedFacts.from_view(dispute_case_view(db, call.case_id))
-            )
+            check = check_agent_utterance(text, self._allowed_facts(db, call))
             spoken = text if check.allowed else SAFE_FALLBACK_LINE
             _append_turn(
                 call, CallSpeaker.AGENT, spoken, [f"blocked:{v}" for v in check.violations]
@@ -619,10 +646,11 @@ class VoiceCallManager:
             call = _get_call(db, call_id)
             case_id = call.case_id
             _append_turn(call, CallSpeaker.SYSTEM, f"tool:{name}")
+            request_reason = arguments.get("reason") if isinstance(arguments, dict) else None
             if (
                 name == ToolName.REQUEST_HUMAN.value
                 and call.status == CallStatus.IN_PROGRESS.value
-                and self._recently_handled(db, call_id)
+                and self._recently_handled(db, call_id, request_reason)
             ):
                 # Stops the loop seen live: after the member finished, the model asked
                 # for them again and the patient's phone was dialed a second time.
@@ -801,6 +829,7 @@ class VoiceCallManager:
             call = _get_call(db, call_id)
             if call.ended_at is not None:
                 return
+            self._facts_cache.pop(call_id, None)  # the call is over: no more utterances
             case = get_case_row(db, call.case_id)
             dispute = latest_dispute(db, case.id)
             call.ended_at = utcnow()

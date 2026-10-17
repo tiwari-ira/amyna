@@ -87,5 +87,68 @@ def test_per_agent_allowlist(
     assert (response.status_code != 403) is allowed, response.text
 
 
+# ------------------------------------------------------------------ [2.4] per-agent tokens
+
+
+def _agent_app(tmp_path) -> tuple[TestClient, dict[str, dict[str, str]], str]:
+    """An app whose Claim and Visit agents hold their own distinct tokens."""
+    from pathlib import Path
+
+    from app.demo_support import build_isolated_app, create_demo_visit, service_headers
+    from claimshield_contracts.enums import ServiceName
+
+    app = build_isolated_app(
+        Path(tmp_path) / "agents.db",
+        claim_agent_service_token="tok-claim",
+        visit_agent_service_token="tok-visit",
+    )
+    client = TestClient(app)
+    relay = service_headers(app.state.container.settings, ServiceName.RELAY)
+    setup = create_demo_visit(client, relay)
+    claim = client.post(
+        "/claims",
+        json={
+            "case_id": setup["case_id"],
+            "source": "finchnode",
+            "finchnode_claim_id": "CLM-2026-0915-001",
+        },
+        headers=relay,
+    ).json()
+    client.post(f"/claims/{claim['claim_id']}/analyze", headers=relay)
+    tokens = {
+        "claim": {"Authorization": "Bearer tok-claim"},
+        "visit": {"Authorization": "Bearer tok-visit"},
+    }
+    return client, tokens, setup["case_id"]
+
+
+def test_a_per_agent_token_cannot_use_another_agents_tools(tmp_path) -> None:
+    client, tokens, case_id = _agent_app(tmp_path)
+    body = {
+        "case_id": case_id,
+        "agent_run": {"agent": "claim_agent", "request_id": "req_1"},
+    }
+    ok = client.post("/internal/tools/get_case", json=body, headers=tokens["claim"])
+    assert ok.status_code == 200
+    # The Claim Agent's token lacks the Visit Agent's tool scope outright.
+    denied = client.post("/internal/tools/get_visit_transcript", json=body, headers=tokens["claim"])
+    assert denied.status_code == 403
+    assert denied.json()["detail"]["code"] == "insufficient_scope"
+
+
+def test_a_per_agent_token_cannot_impersonate_another_agent(tmp_path) -> None:
+    client, tokens, case_id = _agent_app(tmp_path)
+    body = {
+        "case_id": case_id,
+        "agent_run": {"agent": "visit_agent", "request_id": "req_1"},
+    }
+    mismatch = client.post("/internal/tools/get_case", json=body, headers=tokens["claim"])
+    assert mismatch.status_code == 403
+    assert "may not act as visit_agent" in mismatch.json()["detail"]["message"]
+    # The Visit Agent's own token with the same claim is fine.
+    fine = client.post("/internal/tools/get_case", json=body, headers=tokens["visit"])
+    assert fine.status_code == 200
+
+
 def test_responses_carry_contract_version(client: TestClient) -> None:
     assert client.get("/health").headers["X-Amyna-Contracts-Version"]

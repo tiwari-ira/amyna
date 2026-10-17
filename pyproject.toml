@@ -55,3 +55,17 @@ testpaths = [
   "finchnode/tests",
   "fetch/tests",
 ]
+
+[tool.mypy]
+# Incremental typing ratchet: see scripts/mypy_gate.py and .github/workflows/ci.yml.
+# The baseline file holds every currently-known error; CI fails on any NEW one,
+# and the baseline shrinks as errors are fixed (never grows).
+python_version = "3.11"
+# uagents has no stubs; runtime vendors (telnyx) are exercised by tests instead.
+ignore_missing_imports = true
+# Tests are excluded: their fixtures intentionally bend types (test doubles).
+exclude = "(^|/)(tests|migrations|\\.venv|node_modules)/"
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+warn_required_dynamic_aliases = true

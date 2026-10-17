@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -132,5 +132,28 @@ describe("EventLedger", () => {
     const ledger = new EventLedger(undefined, 1000);
     expect(ledger.claim("evt_2", 0)).toBe(true);
     expect(ledger.claim("evt_2", 5000)).toBe(true);
+  });
+
+  it(
+    "claims in O(1): the journal appends, it never rewrites (10k ids -> 10k lines)",
+    { timeout: 30_000 },
+    async () => {
+      const path = join(mkdtempSync(join(tmpdir(), "ledger-")), "events.jsonl");
+      const ledger = new EventLedger(path);
+      for (let i = 0; i < 10_000; i++) ledger.claim(`evt_${i}`);
+      const lines = readFileSync(path, "utf8").trim().split("\n");
+      expect(lines.length).toBe(10_000);
+      // And a restart replays them all back as claimed.
+      expect(new EventLedger(path).claim("evt_9999")).toBe(false);
+    },
+  );
+
+  it("imports the legacy single-JSON ledger format on first read", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "ledger-")), "events.json");
+    // A recent seenAt: a 1970-era timestamp is legitimately expired under the TTL.
+    writeFileSync(path, JSON.stringify({ legacy_evt: Date.now() }));
+    const ledger = new EventLedger(path);
+    expect(ledger.claim("legacy_evt")).toBe(false);
+    expect(ledger.claim("legacy_evt_2")).toBe(true);
   });
 });

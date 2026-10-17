@@ -38,6 +38,9 @@ def test_letter_only_approval_resolves_and_never_calls(
     assert approved["status"] == "approved" and approved["patient_authorization_id"] is None
     case = client.get(f"/cases/{case_id}", headers=relay).json()
     assert case["state"] == "RESOLVED" and case["calls"] == []
+    # Regression (found by mypy): the mapper passed approved_at but the contract
+    # model never declared it, so it was silently dropped from every response.
+    assert case["dispute"]["approved_at"] is not None
     response = client.post("/voice/start", json={"case_id": case_id}, headers=relay)
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "illegal_transition"

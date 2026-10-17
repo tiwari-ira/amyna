@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel, Field
 
 from claimshield_contracts.api import CallbackPhoneIn, CaseCreate, ConsentCreate, FinchNodeClaims
@@ -133,7 +133,10 @@ def set_callback_phone(
 class AuthorizationRecordingIn(BaseModel):
     """The patient's spoken authorization memo (base64 audio, as Relay received it)."""
 
-    audio_base64: str = Field(min_length=16, max_length=9_000_000)
+    # 6 MiB decoded == 8_000_000 base64 chars: keep the wire bound in sync with
+    # recording_service.MAX_INPUT_BYTES so oversize audio is rejected here (422)
+    # before it is ever stored or decoded.
+    audio_base64: str = Field(min_length=16, max_length=8_000_000)
     mime_type: str = Field(min_length=3, max_length=64)
 
 
@@ -167,7 +170,7 @@ def put_authorization_recording(
         case = case_service.get_case_row(db, case_id)
         assert_case_access(case, _patient_user(db, request))
         row = recording_service.store_authorization(
-            db, case, audio, body.mime_type, actor=identity.actor
+            db, case, audio, body.mime_type, actor=identity.actor, store=container.audio_store
         )
         return AuthorizationRecordingOut(stored=True, size_bytes=row.size_bytes)
 
@@ -194,12 +197,33 @@ def get_finchnode_claims(
 def get_notifications(
     case_id: str,
     request: Request,
+    since: str | None = Query(
+        default=None,
+        description=(
+            "ISO-8601 timestamp cursor ([3.2]): return only notifications created after it. "
+            "The same-millisecond edge is the client's to dedup (Relay already does, by id)."
+        ),
+    ),
     _: ServiceIdentity = Depends(require_scopes("cases:read")),
     container: Container = Depends(get_container),
 ) -> list[PatientNotification]:
-    """Core's patient outbox (what the Relay service delivers / renders)."""
+    """Core's patient outbox (what the Relay service delivers / renders).
+
+    With ``since`` the poll transfers only the delta instead of the whole outbox.
+    """
+    from datetime import datetime
+
+    from ..errors import InvalidInput
+
+    since_at: datetime | None = None
+    if since:
+        try:
+            since_at = datetime.fromisoformat(since.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise InvalidInput("since must be an ISO-8601 timestamp.", code="bad_cursor") from exc
     with container.session_scope() as db:
         assert_case_access(case_service.get_case_row(db, case_id), _patient_user(db, request))
         return [
-            mappers.notification_to_model(n) for n in case_service.list_notifications(db, case_id)
+            mappers.notification_to_model(n)
+            for n in case_service.list_notifications(db, case_id, since=since_at)
         ]
