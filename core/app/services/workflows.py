@@ -5,6 +5,7 @@ voice manager, because those open their own transactions (one per tool call,
 exactly like the HTTP path). Used by public routers and by ToolService.
 """
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from claimshield_contracts.api import (
@@ -29,11 +30,33 @@ from .. import mappers
 from ..adapters.fetch_bridge.base import BridgeResult
 from ..errors import Conflict, InvalidInput, NotFound
 from ..models_db import CallRow, DecisionRow, FindingRow
-from . import claim_service, evidence_service, human_service, notification_service
+from . import claim_service, evidence_service, human_service, job_service, notification_service
 from .case_service import get_case_row, latest_dispute
 
 if TYPE_CHECKING:
     from ..container import Container
+
+
+def _run_bridge(
+    container: "Container",
+    job_type: str,
+    payload: dict,
+    idempotency_key: str,
+    case_id: str,
+    run: Callable[[], BridgeResult],
+) -> BridgeResult:
+    """Inline (dev/test) or as a durable job (AGENT_WORK_INLINE=false, prod)."""
+    if container.settings.inline_agent_work:
+        return run()
+    with container.session_scope() as db:
+        job_service.enqueue(
+            db,
+            job_type=job_type,
+            payload=payload,
+            idempotency_key=idempotency_key,
+            case_id=case_id,
+        )
+    return BridgeResult(status=WorkStatus.PENDING)
 
 
 def complete_visit(
@@ -52,7 +75,14 @@ def complete_visit(
         needs_extraction = visit.status != VisitStatus.EVIDENCE_EXTRACTED.value
         case_id = visit.case_id
     bridge = (
-        container.fetch_bridge.extract_visit_evidence(case_id, visit_id)
+        _run_bridge(
+            container,
+            "agent.extract_visit_evidence",
+            {"case_id": case_id, "visit_id": visit_id},
+            f"visit-evidence:{visit_id}",
+            case_id,
+            lambda: container.fetch_bridge.extract_visit_evidence(case_id, visit_id),
+        )
         if needs_extraction
         else BridgeResult(status=WorkStatus.COMPLETED)
     )
@@ -76,7 +106,14 @@ def analyze_claim(container: "Container", *, claim_id: str) -> ClaimAnalysisResu
         case_id = claim.case_id
         needs_analysis = get_case_row(db, case_id).state == CaseState.CLAIM_RECEIVED.value
     if needs_analysis:
-        container.fetch_bridge.analyze_claim(case_id, claim_id)
+        _run_bridge(
+            container,
+            "agent.analyze_claim",
+            {"case_id": case_id, "claim_id": claim_id},
+            f"analyze-claim:{claim_id}",
+            case_id,
+            lambda: container.fetch_bridge.analyze_claim(case_id, claim_id),
+        )
     with container.session_scope() as db:
         return claim_service.analysis_result(db, claim_id)
 
@@ -92,7 +129,14 @@ def prepare_dispute(container: "Container", *, case_id: str) -> DisputePreparati
                 code="not_ready_for_dispute",
             )
     if existing is None:
-        bridge = container.fetch_bridge.prepare_dispute(case_id)
+        bridge = _run_bridge(
+            container,
+            "agent.prepare_dispute",
+            {"case_id": case_id},
+            f"prepare-dispute:{case_id}",
+            case_id,
+            lambda: container.fetch_bridge.prepare_dispute(case_id),
+        )
         status = bridge.status
     else:
         status = WorkStatus.COMPLETED

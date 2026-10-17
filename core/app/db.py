@@ -19,7 +19,17 @@ class Base(DeclarativeBase):
 def make_engine(url: str) -> Engine:
     """Create an engine. SQLite gets FK enforcement, WAL and a busy timeout."""
     if not url.startswith("sqlite"):
-        return create_engine(url, pool_pre_ping=True, hide_parameters=True)
+        # [2.8] Server-side backstops for Postgres: no statement may run longer
+        # than 10s (a wedged query must not pin a pool slot), and no session may
+        # idle inside a transaction for more than 30s (they hold locks).
+        return create_engine(
+            url,
+            pool_pre_ping=True,
+            hide_parameters=True,
+            connect_args={
+                "options": "-c statement_timeout=10000 -c idle_in_transaction_session_timeout=30000"
+            },
+        )
 
     database = url.split("///", 1)[-1]
     if database and database != ":memory:":

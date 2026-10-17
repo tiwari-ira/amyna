@@ -36,6 +36,9 @@ reset-demo: ## Between judges: wipe the demo patient's cases and re-seed a clean
 
 test: test-py test-node ## Run all tests (Python + Node), mock mode
 
+test-parallel: ## Run Python tests across CPU cores (pytest-xdist; same 408-test gate)
+	$(PY) -m pytest -n auto -q
+
 test-py: ## Run Python tests (shared, core, intelligence, finchnode, fetch)
 	$(PY) -m pytest
 

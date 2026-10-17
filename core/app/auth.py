@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from claimshield_contracts.enums import ServiceName
-from claimshield_contracts.tool_api import ToolName
+from claimshield_contracts.enums import AgentName, ServiceName
+from claimshield_contracts.tool_api import AGENT_TOOLS, ToolName
 
 
 def tool_scope(name: ToolName) -> str:
@@ -67,6 +67,22 @@ SCOPES: dict[ServiceName, frozenset[str]] = {
         {"voice:read", "voice:events", "voice:handoff", *(tool_scope(t) for t in VOICE_TOOLS)}
     ),
 }
+
+#: [2.4] Which agent a per-agent service token speaks for. Each agent identity
+# gets exactly its own AGENT_TOOLS allowlist as scopes: the Claim Agent's token
+# cannot invoke visit or dispute tools even before the claim allowlist runs.
+AGENT_IDENTITIES: dict[ServiceName, AgentName] = {
+    ServiceName.ORCHESTRATOR_AGENT: AgentName.ORCHESTRATOR,
+    ServiceName.VISIT_AGENT: AgentName.VISIT_AGENT,
+    ServiceName.CLAIM_AGENT: AgentName.CLAIM_AGENT,
+    ServiceName.DISPUTE_AGENT: AgentName.DISPUTE_AGENT,
+}
+
+for _service, _agent in AGENT_IDENTITIES.items():
+    _tools = AGENT_TOOLS[_agent] & FETCH_TOOLS  # agents never record insurer responses
+    _extra = {"jobs:run", "metrics:read"} if _agent == AgentName.ORCHESTRATOR else set()
+    SCOPES[_service] = frozenset({"cases:read", *_extra, *(tool_scope(t) for t in _tools)})
+del _service, _agent, _tools, _extra
 
 
 @dataclass(frozen=True)

@@ -37,19 +37,33 @@ _LISTENING = "amyna.pending_listeners"
 
 
 class NotificationDispatcher:
-    """Runs deliveries off the request thread, one at a time (keeps their order)."""
+    """Delivers off the request thread, one at a time *per case*.
 
-    def __init__(self) -> None:
-        self._pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="amyna-notify")
+    A single worker kept strict per-case order but capped throughput at one
+    delivery at a time. Instead: N single-thread shards, each owning the cases
+    whose id hashes to it. Order within a case is exactly preserved (same
+    shard, FIFO); different cases deliver in parallel; no worker can ever wait
+    on another worker's future (no deadlock window). [1.x/3.1]
+    """
 
-    def submit(self, work: Callable[[], None]) -> Future:
-        future = self._pool.submit(work)
+    def __init__(self, shards: int = 4) -> None:
+        self._pools = [
+            ThreadPoolExecutor(max_workers=1, thread_name_prefix=f"amyna-notify-{i}")
+            for i in range(max(shards, 1))
+        ]
+
+    def submit(self, work: Callable[[], None], case_id: str = "shared") -> Future:
+        future = self._pool_for(case_id).submit(work)
         future.add_done_callback(_log_failure)
         return future
 
+    def _pool_for(self, case_id: str) -> ThreadPoolExecutor:
+        return self._pools[hash(case_id) % len(self._pools)]
+
     def drain(self, timeout: float = 10.0) -> None:
         """Wait for everything queued so far (tests, shutdown)."""
-        self._pool.submit(lambda: None).result(timeout=timeout)
+        for pool in self._pools:
+            pool.submit(lambda: None).result(timeout=timeout)
 
 
 def _log_failure(future: Future) -> None:
@@ -88,7 +102,7 @@ def _deliver(container: "Container", notification: PatientNotification, case: Ca
 def _dispatch_pending(session: Session) -> None:
     for container, notification, case in session.info.pop(_PENDING, []):
         container.notification_dispatcher.submit(
-            lambda c=container, n=notification, k=case: _deliver(c, n, k)
+            lambda c=container, n=notification, k=case: _deliver(c, n, k), case_id=case.case_id
         )
 
 

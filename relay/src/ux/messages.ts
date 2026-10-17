@@ -113,8 +113,10 @@ export const copy = {
   hospitalNeedsLink:
     "Looks like you're at a hospital. Connect your health records first, then I'll start the recording.",
   askClaimNumber: "Which bill? Send the claim number printed on it (for example CLM-2026-0915-001).",
-  pickBill: (bills: FinchNodeClaimSummary[]): OutboundMessage => ({
-    text: "Your claim is already on your records. Which bill should I check? You can also send a claim number.",
+  pickBill: (bills: FinchNodeClaimSummary[], hiddenCount = 0): OutboundMessage => ({
+    text:
+      "Your claim is already on your records. Which bill should I check? You can also send a claim number." +
+      (hiddenCount > 0 ? ` (${hiddenCount} more bill${hiddenCount === 1 ? "" : "s"} -- send its claim number.)` : ""),
     buttons: bills.map((bill) => ({ id: `bill:${bill.external_claim_id}`, label: billLabel(bill) })),
   }),
   billNotItemized: (detail: Record<string, unknown>): OutboundMessage => ({

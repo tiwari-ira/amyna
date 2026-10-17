@@ -13,6 +13,7 @@ Tokens are opaque, hashed at rest (sha256), never logged.
 
 import hashlib
 import secrets
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -21,15 +22,23 @@ from claimshield_contracts.enums import LinkStatus
 from claimshield_contracts.ids import new_id
 
 from ..audit import record_audit
-from ..db import utcnow
+from ..db import as_utc, utcnow
 from ..errors import Forbidden
 from ..models_db import CaseRow, FinchLinkRow, PatientSessionRow, UserRow
 
 PATIENT_TOKEN_HEADER = "X-Amyna-Patient-Token"
 
+#: [2.2] Session lifetime. A sliding window: every authenticated request
+#: renews it, so only an *inactive* session ages out (24h of silence).
+PATIENT_SESSION_TTL = timedelta(hours=24)
+
 
 def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _expiry() -> datetime:
+    return utcnow() + PATIENT_SESSION_TTL
 
 
 RELAY_SUBJECT_PREFIX = "relay:"
@@ -68,16 +77,51 @@ def _issue(db: Session, *, subject: str, display_name: str | None) -> tuple[User
         db.add(user)
         db.flush()
     raw = f"pt_{secrets.token_urlsafe(32)}"
-    db.add(PatientSessionRow(token_hash=_hash(raw), user_id=user.id))
+    db.add(PatientSessionRow(token_hash=_hash(raw), user_id=user.id, expires_at=_expiry()))
     db.flush()
     return user, raw
 
 
 def resolve_session_user(db: Session, token: str | None) -> UserRow | None:
+    """The user behind a patient token, or None when expired/revoked/unknown.
+
+    A valid token slides its expiry window forward (an active patient is never
+    logged out mid-conversation); an expired or revoked one resolves to None.
+    """
     if not token:
         return None
     row = db.get(PatientSessionRow, _hash(token))
-    return db.get(UserRow, row.user_id) if row else None
+    if row is None or row.revoked_at is not None:
+        return None
+    expires = as_utc(row.expires_at)
+    if expires is not None and expires <= utcnow():
+        return None
+    row.expires_at = _expiry()  # sliding renewal
+    return db.get(UserRow, row.user_id)
+
+
+def revoke_session(db: Session, token: str | None) -> bool:
+    """Log a patient out: the token (and only the token) names the session.
+
+    Revoking is idempotent; the audit trail keeps a soft record. Returns
+    True when a live session was revoked.
+    """
+    if not token:
+        return False
+    row = db.get(PatientSessionRow, _hash(token))
+    if row is None or row.revoked_at is not None:
+        return False
+    row.revoked_at = utcnow()
+    db.flush()
+    record_audit(
+        db,
+        actor="patient",
+        action="identity.session_revoked",
+        resource_type="patient_session",
+        resource_id=None,
+        details={"user_id": row.user_id},
+    )
+    return True
 
 
 def link_finch(db: Session, *, case: CaseRow, actor: str) -> FinchLinkRow | None:

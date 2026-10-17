@@ -26,6 +26,7 @@ import sys
 from uagents import Bureau
 from uagents_core.identity import Identity
 
+from claimshield_contracts.agent_messages import verify_digest_lock
 from claimshield_contracts.enums import AgentName
 
 from .claim_agent import build_claim_agent
@@ -80,6 +81,9 @@ def run_processes() -> int:
 
 
 def main() -> None:
+    # [2.5] Startup attestation: refuse to serve when the code's message
+    # schemas have drifted from the committed protocol lock.
+    verify_digest_lock()
     parser = argparse.ArgumentParser(description="Run the Amyna Fetch agents")
     parser.add_argument("--processes", action="store_true", help="one OS process per agent")
     args = parser.parse_args()

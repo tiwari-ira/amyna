@@ -267,11 +267,21 @@ class RelayEventType(StrEnum):
 
 
 class ServiceName(StrEnum):
-    """Callers that hold a Core service token."""
+    """Callers that hold a Core service token.
+
+    [2.4] The four agent identities exist so each agent can hold its own token
+    in staging/prod: a compromised Claim Agent token cannot touch dispute or
+    visit tools. Unset agent tokens fall back to the shared FETCH token
+    (dev/test keeps single-token ergonomics).
+    """
 
     RELAY = "relay"
     FETCH = "fetch"
     VOICE = "voice"
+    ORCHESTRATOR_AGENT = "orchestrator_agent"
+    VISIT_AGENT = "visit_agent"
+    CLAIM_AGENT = "claim_agent"
+    DISPUTE_AGENT = "dispute_agent"
 
 
 class WorkStatus(StrEnum):

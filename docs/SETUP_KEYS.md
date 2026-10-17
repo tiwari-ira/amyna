@@ -26,6 +26,17 @@ python -c "import secrets; print(secrets.token_urlsafe(32))"
 
 Set `APP_ENV=prod` to disable the dev fallback tokens. All services read the same `.env`.
 
+Production additionally requires (all tokens distinct — a leaked single-agent token
+must never unlock the whole agent network):
+
+| Create | Env var |
+|---|---|
+| One token per agent | `ORCHESTRATOR_SERVICE_TOKEN`, `VISIT_AGENT_SERVICE_TOKEN`, `CLAIM_AGENT_SERVICE_TOKEN`, `DISPUTE_AGENT_SERVICE_TOKEN` |
+| Agent work as durable jobs (never in-request) | `AGENT_WORK_INLINE=false` |
+| Fernet key for spoken authorization audio | `RECORDING_ENCRYPTION_KEY` (`python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`) with `AUTHORIZATION_AUDIO_STORE=file` |
+| Passphrase for encrypted database backups | `BACKUP_PASSPHRASE` (prod compose `backup` profile; dumps are refused without it) |
+| Optional per-IP request cap | `RATE_LIMIT_PER_MINUTE` (default 600) |
+
 ---
 
 ## 1. Fetch.ai — Agentverse + ASI:One (Member 3) — **do this first, it is the riskiest**

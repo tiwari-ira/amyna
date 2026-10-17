@@ -384,8 +384,7 @@ class _Analysis:
             action=DisputeAction.REMOVE_CHARGE,
             refs=[self.billed_ref(line)],
             question=(
-                f"Did you receive {label} during your visit on "
-                f"{spoken_date(line.date_of_service)}?"
+                f"Did you receive {label} during your visit on {spoken_date(line.date_of_service)}?"
             ),
         )
 

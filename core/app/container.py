@@ -5,6 +5,7 @@ Built once per app (``create_app``); tests build their own with test settings.
 
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -19,8 +20,9 @@ from .adapters.telephony import build_telephony
 from .adapters.telephony.base import TelephonyAdapter
 from .adapters.xai_voice import build_voice_adapter
 from .adapters.xai_voice.base import VoiceAdapter
+from .audio_store import AudioStore, DbAudioStore, build_audio_store
 from .auth import TokenRegistry
-from .config import Settings
+from .config import REPO_ROOT, Settings
 from .db import make_engine, make_session_factory, session_scope
 from .services.notification_service import NotificationDispatcher
 from .services.voice_service import VoiceCallManager
@@ -39,6 +41,8 @@ class Container:
     fetch_bridge: FetchBridge = field(init=False)
     voice_manager: VoiceCallManager = field(init=False)
     notification_dispatcher: NotificationDispatcher = field(default_factory=NotificationDispatcher)
+    #: [2.3] Where authorization audio bytes live (DB row or encrypted files).
+    audio_store: AudioStore = field(default_factory=DbAudioStore)
 
     def session_scope(self) -> AbstractContextManager[Session]:
         """One committed-or-rolled-back transaction."""
@@ -47,6 +51,15 @@ class Container:
 
 def build_container(settings: Settings) -> Container:
     engine = make_engine(settings.resolved_database_url)
+    audio_root = Path(settings.authorization_audio_dir)
+    if not audio_root.is_absolute():
+        audio_root = REPO_ROOT / audio_root
+    audio_store, _mode = build_audio_store(
+        mode=settings.authorization_audio_store,
+        root=audio_root,
+        encryption_key=settings.recording_encryption_key,
+        app_env=settings.app_env,
+    )
     container = Container(
         settings=settings,
         engine=engine,
@@ -56,6 +69,7 @@ def build_container(settings: Settings) -> Container:
         notifier=build_notifier(settings),
         voice=build_voice_adapter(settings),
         telephony=build_telephony(settings),
+        audio_store=audio_store,
     )
     container.fetch_bridge = build_fetch_bridge(container)
     container.voice_manager = VoiceCallManager(container)

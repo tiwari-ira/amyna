@@ -60,7 +60,7 @@ class LocalDirectRunner:
         settings = settings or AgentSettings.from_env()
         shared = http or httpx.Client(base_url=settings.core_base_url, timeout=60.0)
         self._clients = {
-            agent: CoreClient("", settings.fetch_token, agent=agent, http=shared)
+            agent: CoreClient("", settings.token_for(agent.value), agent=agent, http=shared)
             for agent in AGENTS
         }
         self.orchestrator = ChatOrchestrator(

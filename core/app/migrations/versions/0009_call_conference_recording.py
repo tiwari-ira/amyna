@@ -34,12 +34,8 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     with op.batch_alter_table("authorization_recordings") as batch_op:
-        batch_op.create_index(
-            "ix_authorization_recordings_case_id", ["case_id"], unique=True
-        )
-        batch_op.create_index(
-            "ix_authorization_recordings_token_hash", ["token_hash"], unique=True
-        )
+        batch_op.create_index("ix_authorization_recordings_case_id", ["case_id"], unique=True)
+        batch_op.create_index("ix_authorization_recordings_token_hash", ["token_hash"], unique=True)
 
 
 def downgrade() -> None:

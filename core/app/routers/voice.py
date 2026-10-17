@@ -94,21 +94,17 @@ async def xai_incoming_call_webhook(
 
 
 @router.get("/recordings/{token}.mp3", include_in_schema=False)
-def authorization_recording(
-    token: str, container: Container = Depends(get_container)
-) -> Response:
+def authorization_recording(token: str, container: Container = Depends(get_container)) -> Response:
     """The patient's authorization memo for Telnyx playback (token per call, live calls only)."""
     from ..services import recording_service
 
     if len(token) > 100:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     with container.session_scope() as db:
-        audio = recording_service.audio_for_token(db, token)
+        audio = recording_service.audio_for_token(db, token, store=container.audio_store)
     if audio is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    return Response(
-        content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"}
-    )
+    return Response(content=audio, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
 
 
 @router.get("/media/silence.wav", include_in_schema=False)

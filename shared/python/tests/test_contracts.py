@@ -155,3 +155,40 @@ def test_schema_digests_match_lock_file() -> None:
         "`python -c 'from claimshield_contracts.agent_messages import write_digest_lock; "
         "write_digest_lock()'` and restart all agents together."
     )
+
+
+def test_startup_attestation_accepts_the_committed_lock() -> None:
+    """[2.5] verify_digest_lock() passes against the committed lock."""
+    assert am.verify_digest_lock() == am.schema_digests()
+
+
+def test_startup_attestation_refuses_drift(tmp_path) -> None:
+    """[2.5] A version-skewed or tampered lock fails loudly at startup."""
+    import json
+
+    import pytest
+
+    lock = json.loads(am.DIGEST_LOCK_PATH.read_text("utf-8"))
+    digests = lock["digests"]
+    name = sorted(digests)[0]
+
+    tampered = tmp_path / "digests.json"
+    # Wrong digest for one message.
+    tampered.write_text(
+        json.dumps(
+            {
+                "agent_protocol_version": lock["agent_protocol_version"],
+                "digests": {**digests, name: "model:not-the-real-digest"},
+            }
+        ),
+        "utf-8",
+    )
+    with pytest.raises(am.ProtocolDriftError, match=name):
+        am.verify_digest_lock(tampered)
+
+    versioned = tmp_path / "version.json"
+    versioned.write_text(
+        json.dumps({"agent_protocol_version": "0.0.0-unknown", "digests": digests}), "utf-8"
+    )
+    with pytest.raises(am.ProtocolDriftError, match="AGENT_PROTOCOL_VERSION"):
+        am.verify_digest_lock(versioned)

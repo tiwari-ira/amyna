@@ -54,6 +54,15 @@ class AgentSettings:
     orchestrator_address: str | None
     orchestrator_handle: str | None
 
+    def token_for(self, agent: str) -> str:
+        """[2.4] The agent's own Core token, or the shared FETCH token.
+
+        ``agent`` is the ServiceName value (e.g. "claim_agent"); the per-agent
+        env vars mirror Core's config (CLAIM_AGENT_SERVICE_TOKEN ...).
+        """
+        specific = _env(f"{agent.upper()}_SERVICE_TOKEN")
+        return specific or self.fetch_token
+
     @classmethod
     def from_env(cls) -> "AgentSettings":
         app_env = _env("APP_ENV", "dev")

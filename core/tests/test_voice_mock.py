@@ -84,6 +84,24 @@ def test_cancel_ends_call_as_failed(
     assert response["case_state"] == "FAILED" and response["call"]["status"] == "failed"
 
 
+def test_guardrail_facts_are_cached_until_the_case_changes(
+    client: TestClient, paused_call: dict[str, Any]
+) -> None:
+    """[1.6] AllowedFacts are rebuilt per case transition, not per utterance."""
+    container = client.app.state.container
+    manager = container.voice_manager
+    call_id = paused_call["call"]["call_id"]
+    with container.session_scope() as db:
+        call = db.get(CallRow, call_id)
+        first = manager._allowed_facts(db, call)
+        second = manager._allowed_facts(db, call)
+    assert first is second  # same version: served from the cache
+
+    # The cache entry dies with the call.
+    manager._facts_cache.clear()
+    assert manager._facts_cache == {}
+
+
 def test_resolving_handoff_completes_call(
     client: TestClient, relay: dict[str, str], voice: dict[str, str], paused_call: dict[str, Any]
 ) -> None:

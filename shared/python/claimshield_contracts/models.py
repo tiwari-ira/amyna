@@ -371,6 +371,7 @@ class Dispute(ContractModel):
     patient_authorization_id: str | None = None
     rejected_reason: str | None = None
     created_at: datetime
+    approved_at: datetime | None = None
 
 
 # --------------------------------------------------------------------- identity
@@ -394,8 +395,6 @@ class FinchLink(ContractModel):
     status: LinkStatus
     created_at: datetime
     revoked_at: datetime | None = None
-
-    approved_at: datetime | None = None
 
 
 # --------------------------------------------------------------------------- calls
