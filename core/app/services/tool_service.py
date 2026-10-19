@@ -69,7 +69,7 @@ from claimshield_contracts.tool_api import (
 
 from .. import mappers
 from ..audit import mask_member_ref, record_audit
-from ..auth import ServiceIdentity, tool_scope
+from ..auth import AGENT_IDENTITIES, ServiceIdentity, tool_scope
 from ..db import utcnow
 from ..errors import DomainError, Forbidden, InvalidInput, NotFound
 from ..models_db import AgentRunRow, ClaimLineRow, ClaimRow, FindingRow, LineAssessmentRow
@@ -108,6 +108,16 @@ class ToolService:
             reason = f"{self._caller.name.value} may not call tool {tool.value}"
         elif agent_run is not None and tool not in AGENT_TOOLS[agent_run.agent]:
             reason = f"{agent_run.agent.value} is not allowed to call {tool.value}"
+        elif agent_run is not None:
+            # [2.4] With per-agent tokens, the caller's identity wins over the
+            # claim in the payload: a Claim Agent token can never act as the
+            # Visit Agent (or vice versa), even with the right claimed name.
+            expected_agent = AGENT_IDENTITIES.get(self._caller.name)
+            if expected_agent is not None and agent_run.agent != expected_agent:
+                reason = (
+                    f"{self._caller.name.value} token may not act as {agent_run.agent.value} "
+                    f"(it belongs to {expected_agent.value})"
+                )
         if reason:
             self._audit_failure(tool, case_id, "forbidden")
             raise Forbidden(reason)

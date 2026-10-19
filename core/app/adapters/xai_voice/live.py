@@ -175,9 +175,7 @@ class XaiRealtimeVoiceAdapter(VoiceAdapter):
                 await ws.send(json.dumps(self.session_update(call.config)))
                 if call.config.metadata.get("wait_for_join") == "1":
                     # Conference mode: greet when Core reports the AI leg is audible.
-                    call.loop.call_later(
-                        GREET_FALLBACK_S, call.commands.put_nowait, "greet"
-                    )
+                    call.loop.call_later(GREET_FALLBACK_S, call.commands.put_nowait, "greet")
                 else:
                     await self._greet(ws, call)
                 commands = asyncio.create_task(self._consume_commands(ws, call))

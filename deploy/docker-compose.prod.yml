@@ -99,6 +99,8 @@ services:
       POSTGRES_HOST: db
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_DB: ${POSTGRES_DB:-amyna}
+      # [2.3] Dumps are PHI: encrypted at rest (AES-256-CBC + PBKDF2 via openssl).
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:?required}
     volumes:
       - ./backup.sh:/deploy/backup.sh:ro
       - backups_prod:/backups

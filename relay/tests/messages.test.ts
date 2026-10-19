@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { PatientNotification } from "../src/coreClient";
+import type { FinchNodeClaimSummary, PatientNotification } from "../src/coreClient";
 import {
   APPROVAL_BUTTONS,
   DATA_CONSENT_TEXT,
@@ -65,5 +65,36 @@ describe("visit notes", () => {
 
   it("says so plainly when nothing billable was heard", () => {
     expect(copy.visitNotes([]).text).toMatch(/^I went through your visit but didn't hear/);
+  });
+});
+
+describe("pickBill", () => {
+  const bill = (n: number) =>
+    ({
+      external_claim_id: `CLM-2026-0${n}`,
+      provider_name: `Provider ${n}`,
+      date_of_service: "2026-09-15",
+      total_billed_cents: 1000 * n,
+      itemized: true,
+    }) as FinchNodeClaimSummary;
+
+  it("lists every bill when there are few, with no extra note", () => {
+    const message = copy.pickBill([bill(1), bill(2)]);
+    expect(message.buttons?.length).toBe(2);
+    expect(message.text).not.toMatch(/more bill/);
+  });
+
+  it("keeps four buttons but tells the patient how many more there are", () => {
+    // The handler slices to MAX_BILL_BUTTONS and passes the hidden count here.
+    const bills = [bill(1), bill(2), bill(3), bill(4), bill(5), bill(6)];
+    const shown = bills.slice(0, 4);
+    const message = copy.pickBill(shown, bills.length - shown.length);
+    expect(message.buttons?.length).toBe(4);
+    expect(message.text).toMatch(/2 more bills -- send its claim number/);
+  });
+
+  it("uses singular wording for exactly one hidden bill", () => {
+    const message = copy.pickBill([bill(1), bill(2), bill(3), bill(4), bill(5)], 1);
+    expect(message.text).toMatch(/1 more bill -- send its claim number/);
   });
 });

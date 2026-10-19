@@ -22,6 +22,7 @@ export class StubCore implements CoreApi {
     return this;
   }
   notes: PatientNotification[] = [];
+  notificationCalls: (string | undefined)[] = [];
   events: Schemas["RelayWebhookEvent"][] = [];
   dispute: Record<string, unknown> | null = null;
   calls: Record<string, unknown>[] = [];
@@ -43,7 +44,9 @@ export class StubCore implements CoreApi {
       case_id: CASE,
       kind,
       text,
-      created_at: new Date().toISOString(),
+      // A deterministic monotonic clock: cursors must never see two notes in
+      // the same millisecond (real Core uses DB timestamps).
+      created_at: extra.created_at ?? new Date(1_700_000_000_000 + this.notes.length).toISOString(),
       ...extra,
     });
   }
@@ -134,7 +137,9 @@ export class StubCore implements CoreApi {
     }
     return {} as Schemas["ClaimAnalysisResult"];
   }
-  async notifications() {
+  async notifications(_caseId: string, since?: string) {
+    this.notificationCalls.push(since);
+    if (since) return this.notes.filter((n) => n.created_at > since);
     return this.notes;
   }
   async getCase() {

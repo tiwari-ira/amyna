@@ -58,6 +58,19 @@ describe("picking a FinchNode bill", () => {
     expect(card.buttons).toEqual([{ id: "bill:claim-demo-001", label: "Jul 18 · $180.00 · Northstar Health System" }]);
   });
 
+  it("caps the bill buttons at four and says how many more there are", async () => {
+    const { core, relay, send } = setup();
+    core.bills = Array.from({ length: 6 }, (_, i) => ({
+      ...bill,
+      external_claim_id: `claim-demo-00${i + 1}`,
+    }));
+    await toBillReview(send);
+    await send({ kind: "button", buttonId: "REVIEW_BILL" });
+    const card = relay.outbox.at(-1)!.message;
+    expect(card.buttons?.length).toBe(4);
+    expect(card.text).toMatch(/2 more bills -- send its claim number/);
+  });
+
   it("explains a summary-only bill instead of analyzing an empty one", async () => {
     const { core, relay, ctx, send } = setup();
     core.bills = [bill];

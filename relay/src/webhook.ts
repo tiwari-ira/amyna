@@ -5,7 +5,7 @@
  *  - Outbound to Core: HMAC identical to core/app/auth.py `sign_payload`.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 /** Standard Webhooks headers; Relay and `relaymessenger listen` both sign this way. */
@@ -250,38 +250,92 @@ export function parsePlatformEvent(payload: unknown): InboundEvent {
   };
 }
 
-/** Durable idempotency ledger: each platform event id is processed at most once. */
+/** Durable idempotency ledger: each platform event id is processed at most once.
+ *
+ * Storage is an append-only JSONL journal ({id, at} and {id, released} records)
+ * compacted lazily: a claim is one Map lookup plus one O(1) append, instead of
+ * a full-file rewrite with an O(n) TTL sweep per event (which was measured at
+ * ~2.5ms/claim at 100k ids). Expiry is checked per claimed id; bulk pruning
+ * happens on load and on the periodic compaction. Old single-JSON files are
+ * still imported on first read.
+ */
 export class EventLedger {
   private readonly seenAt = new Map<string, number>();
+  private ops = 0;
+  private static readonly COMPACT_EVERY = 1024;
 
   constructor(
     private readonly path?: string,
     private readonly ttlMs = 7 * 24 * 3600 * 1000,
   ) {
     if (path && existsSync(path)) {
-      const stored = JSON.parse(readFileSync(path, "utf8")) as Record<string, number>;
-      for (const [id, at] of Object.entries(stored)) this.seenAt.set(id, at);
+      const raw = readFileSync(path, "utf8").trim();
+      let firstLine: unknown;
+      try {
+        firstLine = JSON.parse(raw.split("\n")[0]);
+      } catch {
+        firstLine = undefined; // a torn first line is replayed as nothing
+      }
+      const isLegacy =
+        Array.isArray(firstLine) ||
+        (firstLine !== null && typeof firstLine === "object" && !("id" in (firstLine as object)));
+      let records: { id: string; at?: number; released?: boolean }[] = [];
+      if (isLegacy) {
+        // Legacy format: the whole file was one JSON object (id -> seenAt).
+        const stored = JSON.parse(raw) as Record<string, number> | Record<string, number>[];
+        const entries = Array.isArray(stored)
+          ? Object.entries(stored[stored.length - 1] ?? {})
+          : Object.entries(stored);
+        records = entries.map(([id, at]) => ({ id, at }));
+      } else {
+        for (const line of raw.split("\n")) {
+          if (!line) continue;
+          try {
+            records.push(JSON.parse(line) as { id: string; at?: number; released?: boolean });
+          } catch {
+            // A torn last line (crash mid-append) is skipped: that event replays.
+          }
+        }
+      }
+      for (const rec of records) {
+        if (rec.released) this.seenAt.delete(rec.id);
+        else if (typeof rec.at === "number") this.seenAt.set(rec.id, rec.at);
+      }
+      this.compact(Date.now());
     }
   }
 
   /** Returns false if the event was already recorded; records it otherwise. */
   claim(id: string, now = Date.now()): boolean {
-    for (const [key, at] of this.seenAt) if (now - at > this.ttlMs) this.seenAt.delete(key);
-    if (this.seenAt.has(id)) return false;
+    const seenAt = this.seenAt.get(id);
+    if (seenAt !== undefined && now - seenAt <= this.ttlMs) return false;
     this.seenAt.set(id, now);
-    this.persist();
+    this.append({ id, at: now });
+    if (++this.ops >= EventLedger.COMPACT_EVERY) this.compact(now);
     return true;
   }
 
   /** Forget an id so the platform's retry is processed (used when handling failed). */
   release(id: string): void {
     this.seenAt.delete(id);
-    this.persist();
+    this.append({ id, released: true });
+    if (++this.ops >= EventLedger.COMPACT_EVERY) this.compact(Date.now());
   }
 
-  private persist(): void {
+  private append(record: { id: string; at?: number; released?: boolean }): void {
     if (!this.path) return;
     mkdirSync(dirname(this.path), { recursive: true });
-    writeFileSync(this.path, JSON.stringify(Object.fromEntries(this.seenAt)));
+    appendFileSync(this.path, JSON.stringify(record) + "\n");
+  }
+
+  /** Drop expired ids and rewrite the journal as one snapshot (amortized O(1)). */
+  private compact(now: number): void {
+    this.ops = 0;
+    if (!this.path) return;
+    for (const [id, at] of this.seenAt) {
+      if (now - at > this.ttlMs) this.seenAt.delete(id);
+    }
+    const body = [...this.seenAt].map(([id, at]) => JSON.stringify({ id, at })).join("\n");
+    writeFileSync(this.path, body ? body + "\n" : "");
   }
 }

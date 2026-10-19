@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from claimshield_contracts.enums import CallStatus
 from claimshield_contracts.ids import new_id
 
+from ..audio_store import AudioStore, DbAudioStore
 from ..audit import record_audit
 from ..errors import InvalidInput, UpstreamError
 from ..models_db import AuthorizationRecordingRow, CallRow, CaseRow
@@ -60,9 +61,22 @@ def to_mp3(audio: bytes, mime_type: str) -> bytes:
         try:
             subprocess.run(
                 [
-                    ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
-                    "-i", str(source), "-t", str(MAX_SECONDS),
-                    "-ac", "1", "-ar", "22050", "-b:a", "48k", str(target),
+                    ffmpeg,
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    "-i",
+                    str(source),
+                    "-t",
+                    str(MAX_SECONDS),
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "22050",
+                    "-b:a",
+                    "48k",
+                    str(target),
                 ],
                 check=True,
                 capture_output=True,
@@ -78,9 +92,19 @@ def to_mp3(audio: bytes, mime_type: str) -> bytes:
 
 
 def store_authorization(
-    db: Session, case: CaseRow, audio: bytes, mime_type: str, *, actor: str
+    db: Session,
+    case: CaseRow,
+    audio: bytes,
+    mime_type: str,
+    *,
+    actor: str,
+    store: AudioStore | None = None,
 ) -> AuthorizationRecordingRow:
-    """Store (or replace) the case's authorization memo as MP3."""
+    """Store (or replace) the case's authorization memo as MP3.
+
+    With an encrypted file store ([2.3]) the bytes go there and the row keeps
+    only a storage key: database dumps no longer carry spoken PHI.
+    """
     if not audio:
         raise InvalidInput("The recording is empty.", code="recording_empty")
     if len(audio) > MAX_INPUT_BYTES:
@@ -92,7 +116,16 @@ def store_authorization(
     if row is None:
         row = AuthorizationRecordingRow(id=new_id("recording"), case_id=case.id)
         db.add(row)
-    row.audio = mp3
+    if store is not None and not isinstance(store, DbAudioStore):
+        old_key = row.storage_key
+        store.put(row.id, mp3)
+        if old_key and old_key != row.id:
+            store.delete(old_key)
+        row.audio = None
+        row.storage_key = row.id
+    else:
+        row.audio = mp3
+        row.storage_key = None
     row.mime_type = "audio/mpeg"
     row.size_bytes = len(mp3)
     row.token_hash = _hash(secrets.token_urlsafe(32))  # nothing can fetch it until a call
@@ -112,9 +145,7 @@ def store_authorization(
 def has_authorization(db: Session, case_id: str) -> bool:
     return (
         db.scalars(
-            select(AuthorizationRecordingRow.id).where(
-                AuthorizationRecordingRow.case_id == case_id
-            )
+            select(AuthorizationRecordingRow.id).where(AuthorizationRecordingRow.case_id == case_id)
         ).first()
         is not None
     )
@@ -132,23 +163,48 @@ def playback_url(db: Session, case_id: str, public_base_url: str) -> str | None:
     return f"{public_base_url.rstrip('/')}{RECORDING_PATH}/{token}.mp3"
 
 
-def audio_for_token(db: Session, token: str) -> bytes | None:
-    """The MP3 for a playback token, only while that case has a live call."""
+def audio_for_token(db: Session, token: str, *, store: AudioStore | None = None) -> bytes | None:
+    """The MP3 for a playback token, only while that case has a live call.
+
+    [2.6] Every attempt is audited: a denied fetch (bad or expired token, or no
+    live call) is the brute-force signal an operator alerts on -- there should
+    be roughly one granted fetch per live call, never bursts.
+    """
     row = db.scalars(
         select(AuthorizationRecordingRow).where(
             AuthorizationRecordingRow.token_hash == _hash(token)
         )
     ).first()
-    if row is None:
-        return None
-    live = db.scalars(
-        select(CallRow.id).where(
-            CallRow.case_id == row.case_id,
-            CallRow.status.in_(_LIVE),
-            CallRow.ended_at.is_(None),
+    case_id = row.case_id if row else None
+    live = (
+        db.scalars(
+            select(CallRow.id).where(
+                CallRow.case_id == case_id,
+                CallRow.status.in_(_LIVE),
+                CallRow.ended_at.is_(None),
+            )
+        ).first()
+        if case_id
+        else None
+    )
+    audio: bytes | None = None
+    if row is not None and live is not None:
+        audio = store.get(row.storage_key) if row.storage_key and store is not None else row.audio
+    if audio is None:
+        log.warning(
+            "recording playback denied",
+            extra={"fields": {"case_id": case_id}},
         )
-    ).first()
-    return row.audio if live else None
+    record_audit(
+        db,
+        actor="telephony:playback",
+        action="recording.playback",
+        case_id=case_id,
+        resource_type="recording",
+        resource_id=row.id if row else None,
+        details={"granted": audio is not None},
+    )
+    return audio
 
 
 def silence_wav(seconds: int = 2) -> bytes:

@@ -18,6 +18,7 @@ from .config import Settings, get_settings
 from .container import Container, build_container
 from .errors import DomainError
 from .observability import install_request_metrics
+from .rate_limit import install_rate_limit
 from .routers import (
     assistant,
     cases,
@@ -99,6 +100,11 @@ def create_app(settings: Settings | None = None, container: Container | None = N
         version=__version__,
         description=DESCRIPTION,
         openapi_tags=TAGS,
+        # [2.8] No interactive API surface in staging/prod: it names every route
+        # (including internal tools) on a public endpoint.
+        docs_url="/docs" if settings.app_env in ("dev", "test") else None,
+        redoc_url=None if settings.app_env not in ("dev", "test") else "/redoc",
+        openapi_url="/openapi.json" if settings.app_env in ("dev", "test") else None,
     )
     app.state.container = container or build_container(settings)
     app.add_exception_handler(DomainError, _domain_error_handler)
@@ -128,6 +134,8 @@ def create_app(settings: Settings | None = None, container: Container | None = N
     ):
         app.include_router(module.router)
     install_request_metrics(app)
+    # [2.1] Per-IP sliding window + auth-failure circuit (health is exempt).
+    install_rate_limit(app, per_minute=settings.rate_limit_per_minute)
     if settings.telephony_mode == "live":
         _start_call_timers(app.state.container)
     return app

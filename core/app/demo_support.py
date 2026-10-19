@@ -118,7 +118,8 @@ def service_headers(settings: Settings, service: ServiceName) -> dict[str, str]:
     return {"Authorization": f"Bearer {settings.service_tokens()[service]}"}
 
 
-def _ok(response: httpx.Response) -> dict[str, Any]:
+def _ok(response: httpx.Response) -> Any:
+    """The decoded JSON body (an object or a list) of a non-error response."""
     if response.status_code >= 400:
         raise RuntimeError(f"{response.request.method} {response.request.url} -> {response.text}")
     return response.json()

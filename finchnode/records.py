@@ -8,8 +8,9 @@ Shape verified against the public demo on 2026-10-09 (schemaVersion 2).
 
 The functions here turn one snapshot into the shared contract models. Codes stay
 verbatim (ARCHITECTURE rule 5) and nothing is invented for missing fields: a
-record without a usable date keeps ``occurred_on=None``, and a bill with no procedure code comes back with ``lines=[]``. A procedure code
-becomes one line for the claim total, because FinchNode does not split that total.
+record without a usable date keeps ``occurred_on=None``, and a bill with no
+procedure code comes back with ``lines=[]``. A procedure code becomes one line
+for the claim total, because FinchNode does not split that total.
 """
 
 import re

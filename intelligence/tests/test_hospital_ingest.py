@@ -3,6 +3,7 @@
 from claimshield_contracts.enums import CodeSystem
 from intelligence.codes.hospital_ingest import (
     DATA_DIR,
+    _cents,
     find_price_index,
     load_cms_csv,
     load_cms_json,
@@ -26,3 +27,12 @@ def test_json_format() -> None:
 def test_lookup_by_provider_name() -> None:
     assert find_price_index(None, "Bayview Imaging Center (synthetic)") is not None
     assert find_price_index("Unknown Hospital") is None
+
+
+def test_cents_is_exact_decimal_money() -> None:
+    """round(float*100) drifted a cent on *.005 values; Decimal must not."""
+    assert _cents("12.345") == 1235  # ROUND_HALF_UP: 12.345 -> 1235 cents
+    assert _cents(0.005) == 1  # float round(0.5) is 0 on ties-to-even
+    assert _cents("0.1") == 10
+    assert _cents("") is None
+    assert _cents(None) is None

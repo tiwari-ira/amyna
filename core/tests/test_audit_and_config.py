@@ -6,10 +6,12 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 
 from app.audit import PhiRedactingFilter, mask_member_ref, mask_phone, redact, redact_text
 from app.config import ConfigError, Settings
 from app.demo_support import build_isolated_app, clean_env
+from claimshield_contracts.enums import ServiceName
 
 
 @pytest.fixture(autouse=True)
@@ -93,7 +95,19 @@ def test_one_configured_line_is_used_when_the_payer_name_differs() -> None:
 
 
 def test_dev_fallback_tokens_only_outside_prod() -> None:
-    assert all(_settings().service_tokens().values())
+    tokens = _settings().service_tokens()
+    # The three primary identities get dev fallbacks; the per-agent tokens
+    # ([2.4]) stay empty in dev and those agents fall back to the FETCH token.
+    assert all(tokens[name] for name in (ServiceName.RELAY, ServiceName.FETCH, ServiceName.VOICE))
+    assert not any(
+        tokens[name]
+        for name in (
+            ServiceName.ORCHESTRATOR_AGENT,
+            ServiceName.VISIT_AGENT,
+            ServiceName.CLAIM_AGENT,
+            ServiceName.DISPUTE_AGENT,
+        )
+    )
     prod = Settings(_env_file=None, app_env="prod")  # type: ignore[arg-type]
     assert not any(prod.service_tokens().values())
     assert prod.webhook_secret() == ""
@@ -143,6 +157,7 @@ def _live_overrides(app_env: str, finchnode_mode: str) -> dict[str, object]:
         "notify_mode": "relay_service",
         "relay_service_url": "https://relay.amyna.example.com",
         "fetch_mode": "agentverse",
+        "inline_agent_work": False,  # staging/prod run agent work as durable jobs
         "orchestrator_url": "https://agents.amyna.example.com",
         "xai_voice_mode": "live",
         "xai_api_key": "xai-test",
@@ -161,7 +176,14 @@ def _live_overrides(app_env: str, finchnode_mode: str) -> dict[str, object]:
         "relay_service_token": "r",
         "fetch_service_token": "f",
         "voice_service_token": "v",
+        "orchestrator_service_token": "tok-orchestrator",
+        "visit_agent_service_token": "tok-visit",
+        "claim_agent_service_token": "tok-claim",
+        "dispute_agent_service_token": "tok-dispute",
         "core_webhook_secret": "w",
+        # [2.3] prod keeps spoken authorizations outside the DB, encrypted.
+        "authorization_audio_store": "file",
+        "recording_encryption_key": __import__("base64").urlsafe_b64encode(b"0" * 32).decode(),
     }
 
 
@@ -203,6 +225,14 @@ def test_env_refuses_mock_integrations(app_env: str) -> None:
     ):
         settings = _settings(**{**baseline, flag: value})
         assert any(needle in m for m in settings.environment_mistakes())
+
+
+@pytest.mark.parametrize("app_env", ["staging", "prod"])
+def test_env_refuses_inline_agent_work(app_env: str) -> None:
+    """[1.4] No request thread may run the agent pipeline in staging/prod."""
+    baseline = _live_overrides(app_env, "sandbox" if app_env == "staging" else "production")
+    settings = _settings(**{**baseline, "inline_agent_work": True})
+    assert any("AGENT_WORK_INLINE=false" in m for m in settings.environment_mistakes())
 
 
 @pytest.mark.parametrize("app_env", ["staging", "prod"])
@@ -257,3 +287,26 @@ def test_uvicorn_access_lines_are_redacted_not_broken() -> None:
     handler.handle(record)
     line = stream.getvalue()
     assert "GET /cases/x" in line and "200" in line and "jane@example.com" not in line
+
+
+def test_staging_hides_the_interactive_api_surface() -> None:
+    """[2.8] /docs and /openapi.json must not exist outside dev/test.
+
+    Uses the fully valid staging config (the fail-closed gate must pass): the
+    engine and live adapters build without connecting to anything.
+    """
+    from fastapi.testclient import TestClient as _Client
+
+    from app.main import create_app
+
+    settings = _settings(**_live_overrides("staging", "sandbox"))
+    staging = _Client(create_app(settings))
+    assert staging.get("/docs").status_code == 404
+    assert staging.get("/openapi.json").status_code == 404
+    # The programmatic schema (export_openapi.py) still exists: only the routes are gone.
+    assert create_app(settings).openapi()["paths"]
+
+
+def test_dev_keeps_the_interactive_api_surface(client: TestClient) -> None:
+    """[2.8] Dev/test keeps /docs for local development."""
+    assert client.get("/docs").status_code == 200

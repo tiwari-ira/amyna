@@ -56,10 +56,15 @@ def test_a_procedure_code_becomes_one_line_at_the_claim_total() -> None:
                         "servicePeriod": {"start": "2015-03-25", "end": "2015-04-18"},
                         "providerBilled": {"amount": 19593.85, "currency": "USD"},
                         "procedureCodes": [
-                            {"code": "Z000", "display": "Encounter for general adult medical examination"},
+                            {
+                                "code": "Z000",
+                                "display": "Encounter for general adult medical examination",
+                            },
                             {
                                 "code": "5A0211D",
-                                "display": "ASSIST WITH CARDIAC OUTPUT USING IMPELLER PUMP, INTERMITTENT",
+                                "display": (
+                                    "ASSIST WITH CARDIAC OUTPUT USING IMPELLER PUMP, INTERMITTENT"
+                                ),
                             },
                         ],
                     }

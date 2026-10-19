@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     relay_service_token: str = ""
     fetch_service_token: str = ""
     voice_service_token: str = ""
+    # [2.4] Per-agent tokens: when set, each agent authenticates as itself and
+    # Core rejects a token/agent mismatch. Empty => the agent falls back to the
+    # shared FETCH token (dev/test). Staging/prod must set all four.
+    orchestrator_service_token: str = ""
+    visit_agent_service_token: str = ""
+    claim_agent_service_token: str = ""
+    dispute_agent_service_token: str = ""
     core_webhook_secret: str = ""
     confirmation_threshold: float = 0.9
     notify_mode: Literal["outbox", "relay_service"] = "outbox"
@@ -114,6 +121,16 @@ class Settings(BaseSettings):
     # --- fetch
     fetch_mode: Literal["local_direct", "agentverse"] = "local_direct"
     orchestrator_url: str = "http://localhost:8000"
+    # [2.1] Per-IP request cap (sliding minute). Default 600: generous for a
+    # patient conversation, brutal for a script. /health is exempt.
+    rate_limit_per_minute: int = 600
+    # true (dev/test default) => the in-request bridge runs the agent logic inline,
+    # keeping the mock/demo flow synchronous. false => the three bridge steps
+    # (visit evidence, claim analysis, dispute prep) are enqueued as durable jobs
+    # and the API answers 202 pending; scripts/job_worker.py (or the compose
+    # `jobs` service) drains them. Staging/prod must run async: no request
+    # thread may hold a DB pool slot for the whole agent pipeline.
+    inline_agent_work: bool = True
 
     # --- finchnode + intelligence
     # mock => local fixtures. demo => FinchNode's public keyless fake demo API.
@@ -135,6 +152,13 @@ class Settings(BaseSettings):
     extraction_mode: Literal["rules", "ollama"] = "rules"
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "qwen3:1.7b"
+    # [2.3] Where the patient's spoken authorization lives: "db" keeps the MP3
+    # bytes in the row (dev/test); "file" stores them Fernet-encrypted under
+    # AUTHORIZATION_AUDIO_DIR with only a storage key in the DB, so backups and
+    # database dumps never carry spoken PHI in the clear. Required in prod.
+    authorization_audio_store: Literal["db", "file"] = "db"
+    authorization_audio_dir: str = ".data/recordings"
+    recording_encryption_key: str = ""
 
     # ------------------------------------------------------------------ derived
 
@@ -148,14 +172,25 @@ class Settings(BaseSettings):
         return self.app_env in ("dev", "test")
 
     def service_tokens(self) -> dict[ServiceName, str]:
-        """Bearer token per caller, with dev fallbacks outside prod."""
+        """Bearer token per caller, with dev fallbacks outside prod.
+
+        The per-agent tokens (config.py [2.4]) are optional: an empty one is
+        dropped by the TokenRegistry and that agent falls back to FETCH.
+        """
         configured = {
             ServiceName.RELAY: self.relay_service_token,
             ServiceName.FETCH: self.fetch_service_token,
             ServiceName.VOICE: self.voice_service_token,
+            ServiceName.ORCHESTRATOR_AGENT: self.orchestrator_service_token,
+            ServiceName.VISIT_AGENT: self.visit_agent_service_token,
+            ServiceName.CLAIM_AGENT: self.claim_agent_service_token,
+            ServiceName.DISPUTE_AGENT: self.dispute_agent_service_token,
         }
         if self.allows_dev_defaults:
-            return {name: value or DEV_SERVICE_TOKENS[name] for name, value in configured.items()}
+            return {
+                name: value or DEV_SERVICE_TOKENS.get(name, "")
+                for name, value in configured.items()
+            }
         return configured
 
     def webhook_secret(self) -> str:
@@ -328,6 +363,13 @@ class Settings(BaseSettings):
         # The agent network runs as a persistent service, not in-process logic.
         if self.fetch_mode != "agentverse":
             mistakes.append(f"APP_ENV={self.app_env} requires FETCH_MODE=agentverse")
+        # Agent work runs as durable jobs: no request thread may run the
+        # whole pipeline inline (it would hold a DB pool slot for seconds).
+        if self.inline_agent_work:
+            mistakes.append(
+                f"APP_ENV={self.app_env} requires AGENT_WORK_INLINE=false "
+                "(the jobs service drains agent work)"
+            )
         # No silent mock adapters.
         if self.xai_voice_mode != "live":
             mistakes.append(f"APP_ENV={self.app_env} requires XAI_VOICE_MODE=live")
@@ -349,6 +391,38 @@ class Settings(BaseSettings):
             ):
                 if not value:
                     mistakes.append(f"APP_ENV={self.app_env} requires {name}")
+            # [2.4] One token per agent, all distinct: a leaked single-agent
+            # token must never unlock the whole agent network.
+            agent_tokens = {
+                "ORCHESTRATOR_SERVICE_TOKEN": self.orchestrator_service_token,
+                "VISIT_AGENT_SERVICE_TOKEN": self.visit_agent_service_token,
+                "CLAIM_AGENT_SERVICE_TOKEN": self.claim_agent_service_token,
+                "DISPUTE_AGENT_SERVICE_TOKEN": self.dispute_agent_service_token,
+            }
+            for name, value in agent_tokens.items():
+                if not value:
+                    mistakes.append(f"APP_ENV={self.app_env} requires {name} (per-agent tokens)")
+            # [2.3] Spoken authorizations must not sit in database dumps in the clear.
+            if self.authorization_audio_store != "file":
+                mistakes.append(
+                    f"APP_ENV={self.app_env} requires AUTHORIZATION_AUDIO_STORE=file "
+                    "(encrypted file storage for authorization recordings)"
+                )
+            if self.authorization_audio_store == "file" and not self.recording_encryption_key:
+                mistakes.append(
+                    f"APP_ENV={self.app_env} requires RECORDING_ENCRYPTION_KEY when "
+                    "AUTHORIZATION_AUDIO_STORE=file"
+                )
+            all_tokens = [
+                self.relay_service_token,
+                self.fetch_service_token,
+                self.voice_service_token,
+                *agent_tokens.values(),
+            ]
+            if len(set(all_tokens)) != len(all_tokens):
+                mistakes.append(
+                    f"APP_ENV={self.app_env} requires all service tokens to be distinct"
+                )
         if self.app_env == "prod" and "ngrok" in self.public_base_url:
             mistakes.append("APP_ENV=prod refuses a tunnel (ngrok) PUBLIC_BASE_URL")
         return mistakes

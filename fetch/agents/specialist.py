@@ -54,7 +54,9 @@ def build_specialist(
         agentverse=agentverse,
         publish_agent_details=False,
     )
-    client = tools or CoreClient(settings.core_base_url, settings.fetch_token, agent=agent_name)
+    client = tools or CoreClient(
+        settings.core_base_url, settings.token_for(agent_name.value), agent=agent_name
+    )
     proto = protocol(protocol_name)
 
     @proto.on_message(request_model, replies=response_model)

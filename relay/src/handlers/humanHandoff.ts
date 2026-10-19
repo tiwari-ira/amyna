@@ -38,8 +38,14 @@ export async function deliverNotification(
 
 /** Pull Core's outbox for this case and show anything not shown yet. */
 export async function deliverPending(ctx: HandlerContext, convo: Conversation): Promise<void> {
-  for (const notification of await ctx.core.notifications(requireCase(convo))) {
+  // [3.2] Delta poll with the cursor from the last pull; the same-millisecond
+  // edge is safe because deliverNotification dedups by notification id.
+  const since = convo.lastNotificationAt;
+  const notifications = await ctx.core.notifications(requireCase(convo), since);
+  for (const notification of notifications) {
     await deliverNotification(ctx, convo, notification);
+    const at = notification.created_at;
+    if (!convo.lastNotificationAt || at > convo.lastNotificationAt) convo.lastNotificationAt = at;
   }
 }
 

@@ -91,3 +91,46 @@ def test_a_failed_delivery_is_recorded(tmp_path: Path) -> None:
     container.notification_dispatcher.drain()
     rows = client.get(f"/cases/{case_id}/notifications", headers=relay).json()
     assert rows[-1]["text"] == "hello" and rows[-1]["delivered"] is False
+
+
+def test_sharded_delivery_keeps_per_case_order_across_cases(tmp_path: Path) -> None:
+    """[3.1] Different cases deliver in parallel; one case's order is strict."""
+    import time as _time
+
+    app = build_isolated_app(tmp_path / "sharded.db")
+    container = app.state.container
+    notifier = _RecordingNotifier(container)
+    container.notifier = notifier
+    order: dict[str, list[str]] = {"case_a": [], "case_b": []}
+
+    def slow_send(notification: Any, case: Any) -> DeliveryResult:
+        _time.sleep(0.05)
+        order[case.case_id if hasattr(case, "case_id") else "case_a"].append(
+            notification.notification_id
+        )
+        return DeliveryResult(delivered=True)
+
+    notifier.send = slow_send  # type: ignore[method-assign]
+    dispatcher = container.notification_dispatcher
+    for i in range(6):
+        dispatcher.submit(
+            lambda n=f"ntf_a{i}": slow_send(_StubNotification(n), _StubCase("case_a")),
+            case_id="case_a",
+        )
+        dispatcher.submit(
+            lambda n=f"ntf_b{i}": slow_send(_StubNotification(n), _StubCase("case_b")),
+            case_id="case_b",
+        )
+    dispatcher.drain(timeout=30)
+    assert order["case_a"] == [f"ntf_a{i}" for i in range(6)]  # strict FIFO per case
+    assert order["case_b"] == [f"ntf_b{i}" for i in range(6)]
+
+
+class _StubNotification:
+    def __init__(self, notification_id: str) -> None:
+        self.notification_id = notification_id
+
+
+class _StubCase:
+    def __init__(self, case_id: str) -> None:
+        self.case_id = case_id

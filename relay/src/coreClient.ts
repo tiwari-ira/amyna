@@ -80,8 +80,10 @@ export class CoreClient {
     return this.request("POST", `/cases/${caseId}/consents`, body);
   }
 
-  notifications(caseId: string): Promise<PatientNotification[]> {
-    return this.request("GET", `/cases/${caseId}/notifications`);
+  notifications(caseId: string, since?: string): Promise<PatientNotification[]> {
+    // [3.2] Delta polling: only notifications created after the cursor transfer.
+    const query = since ? `?since=${encodeURIComponent(since)}` : "";
+    return this.request("GET", `/cases/${caseId}/notifications${query}`);
   }
 
   /** The patient's bills on FinchNode (summaries: `itemized=false` needs the itemized bill). */

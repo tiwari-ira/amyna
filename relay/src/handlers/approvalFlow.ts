@@ -38,7 +38,9 @@ export async function reviewBill(ctx: HandlerContext, convo: Conversation): Prom
   }
   convo.stage = "awaiting_claim_id";
   if (bills.length) {
-    await say(ctx, convo, copy.pickBill(bills.slice(0, MAX_BILL_BUTTONS)));
+    const shown = bills.slice(0, MAX_BILL_BUTTONS);
+    const hidden = bills.length - shown.length;
+    await say(ctx, convo, copy.pickBill(shown, hidden));
     return;
   }
   await say(ctx, convo, copy.askClaimNumber);

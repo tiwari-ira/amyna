@@ -352,9 +352,7 @@ def test_a_patient_who_does_not_pick_up_does_not_drop_the_insurer(env, monkeypat
         "resume_session",
         lambda call_id, handler, note="verified": resumed.append(note),
     )
-    _paused_with_conference(
-        app, merge_phase="patient_being_connected", human_call_ref="cc_human"
-    )
+    _paused_with_conference(app, merge_phase="patient_being_connected", human_call_ref="cc_human")
     _post(
         client,
         _event(
@@ -432,8 +430,18 @@ def test_a_voice_memo_is_converted_to_mp3() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         target = Path(tmp) / "memo.m4a"
         subprocess.run(
-            ["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "sine=duration=1",
-             "-c:a", "aac", str(target)],
+            [
+                "ffmpeg",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=duration=1",
+                "-c:a",
+                "aac",
+                str(target),
+            ],
             check=True,
         )
         mp3 = recording_service.to_mp3(target.read_bytes(), "audio/mp4")

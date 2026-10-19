@@ -179,8 +179,23 @@ _PROVIDER = re.compile(r"\b(hospital|clinic|medical|health|center|centre)\b", re
 _DUPLICATE = re.compile(r"\b(two|twice|duplicate)\b", re.IGNORECASE)
 _SERVICES = ("mri", "x-ray", "ct scan", "ultrasound", "blood test", "ekg")
 
-_REVIEW = ("review", "check", "look", "wrong", "right", "duplicate", "overcharg")
-_DISPUTE = ("dispute", "fight", "fix", "remove", "shouldn't have", "never got", "didn't get")
+_REVIEW = ("review", "check", "look", "wrong", "right", "overcharg")
+_DISPUTE = (
+    "dispute",
+    "fight",
+    "fix",
+    "remove",
+    "shouldn't have",
+    "never got",
+    "didn't get",
+    # Duplicate-charge phrasings are dispute intent, not review: the patient
+    # is naming a specific line to remove ([3.3] eval-harness finding).
+    "duplicate",
+    "charged twice",
+    "billed twice",
+    "double bill",
+    "twice",
+)
 _CALL = ("call", "phone", "speak to", "talk to")
 _TERM = ("what is", "what's a", "what does", "mean", "claim number", "member id", "payer")
 _VISIT = ("went to", "at the hospital", "appointment", "visit", "saw the doctor")
@@ -318,6 +333,11 @@ class HeuristicLanguageEngine:
         return None
 
     def _intent(self, low: str) -> PatientIntent:
+        # Providing an actual claim ID wins over everything: "what is a claim
+        # number?" asks a term question, but "my claim number is CLM-..." is
+        # the patient handing us the bill ([3.3] eval-harness finding).
+        if _CLAIM.search(low):
+            return PatientIntent.PROVIDE_BILL
         if any(word in low for word in _TERM):
             return PatientIntent.EXPLAIN_TERM
         if any(word in low for word in _CALL):

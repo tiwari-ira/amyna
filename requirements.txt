@@ -44,6 +44,7 @@ attrs==26.1.0
 bcrypt==5.0.0
 bech32==1.2.0
 certifi==2026.7.22
+cryptography==50.0.2
 cffi==2.1.1
 charset-normalizer==3.5.2
 click==8.5.0
@@ -79,8 +80,10 @@ pydantic==2.13.5
 pydantic-settings==2.15.0
 pydantic_core==2.46.5
 Pygments==2.21.0
-PyNaCl==1.6.0
+PyNaCl==1.6.0  # [2.7] PYSEC-2026-1448/-3002: 1.6.2 fixes them but cosmpy 0.12.2 (uagents 0.25.5) pins ==1.6.0; revisit on a uagents upgrade
 pytest==9.1.1
+pytest-xdist==3.8.0
+hypothesis==6.170.1
 python-dateutil==2.9.0.post0
 python-discovery==1.6.1
 python-dotenv==1.2.4

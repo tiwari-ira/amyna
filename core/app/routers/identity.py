@@ -12,7 +12,7 @@ The record is the *binding*: an authenticated user <-> an authorized FinchNode
 patient identity. A typed ``fn_pat_...`` remains an identifier, never a credential.
 """
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, Response, status
 
 from claimshield_contracts.api import AuthSessionCreate, AuthSessionResult
 from claimshield_contracts.enums import ServiceName
@@ -21,9 +21,11 @@ from ..auth import ServiceIdentity, require_scopes
 from ..container import Container
 from ..deps import get_container
 from ..services.identity_service import (
+    PATIENT_TOKEN_HEADER,
     RELAY_SUBJECT_PREFIX,
     create_demo_session,
     create_relay_session,
+    revoke_session,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -49,3 +51,21 @@ def start_session(
                 display_name=body.display_name,
             )
         return AuthSessionResult(user_id=user.id, patient_token=token)
+
+
+@router.post("/revoke", status_code=status.HTTP_204_NO_CONTENT)
+def revoke(
+    response: Response,
+    container: Container = Depends(get_container),
+    patient_token: str | None = Header(default=None, alias=PATIENT_TOKEN_HEADER),
+) -> Response:
+    """Log out: revoke the patient session named by its own token.
+
+    Self-service by construction -- the token (and only the token) identifies
+    the session, so a leaked token can be neutralized by its owner at any time.
+    Always 204: the result does not reveal whether a session existed.
+    """
+    with container.session_scope() as db:
+        revoke_session(db, patient_token)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response

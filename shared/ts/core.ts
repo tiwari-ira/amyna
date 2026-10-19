@@ -44,6 +44,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke
+         * @description Log out: revoke the patient session named by its own token.
+         *
+         *     Self-service by construction -- the token (and only the token) identifies
+         *     the session, so a leaked token can be neutralized by its owner at any time.
+         *     Always 204: the result does not reveal whether a session existed.
+         */
+        post: operations["revoke_auth_revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/session": {
         parameters: {
             query?: never;
@@ -91,6 +115,26 @@ export interface paths {
         /** Get Case */
         get: operations["get_case_cases__case_id__get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cases/{case_id}/authorization-recording": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Authorization Recording
+         * @description Store the memo that plays to the insurer when the call connects (converted to MP3).
+         */
+        put: operations["put_authorization_recording_cases__case_id__authorization_recording_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -172,6 +216,8 @@ export interface paths {
         /**
          * Get Notifications
          * @description Core's patient outbox (what the Relay service delivers / renders).
+         *
+         *     With ``since`` the poll transfers only the delta instead of the whole outbox.
          */
         get: operations["get_notifications_cases__case_id__notifications_get"];
         put?: never;
@@ -250,7 +296,8 @@ export interface paths {
         put?: never;
         /**
          * Analyze Claim
-         * @description Run the Claim Agent logic (idempotent). `status=pending` in FETCH_MODE=agentverse.
+         * @description Run the Claim Agent logic (idempotent). `status=pending` (202) when the
+         *     work runs as a durable job (FETCH_MODE=agentverse, or AGENT_WORK_INLINE=false).
          */
         post: operations["analyze_claim_claims__claim_id__analyze_post"];
         delete?: never;
@@ -1213,6 +1260,23 @@ export interface components {
             user_id: string;
         };
         /**
+         * AuthorizationRecordingIn
+         * @description The patient's spoken authorization memo (base64 audio, as Relay received it).
+         */
+        AuthorizationRecordingIn: {
+            /** Audio Base64 */
+            audio_base64: string;
+            /** Mime Type */
+            mime_type: string;
+        };
+        /** AuthorizationRecordingOut */
+        AuthorizationRecordingOut: {
+            /** Size Bytes */
+            size_bytes: number;
+            /** Stored */
+            stored: boolean;
+        };
+        /**
          * CallMergePhase
          * @description First-class lifecycle of the immediate human merge on a paused call (17A).
          *
@@ -1607,6 +1671,8 @@ export interface components {
         DecisionType: "finding_answer" | "handoff_resolution" | "dispute_approval" | "dispute_rejection";
         /** Dispute */
         Dispute: {
+            /** Approved At */
+            approved_at?: string | null;
             /** Case Id */
             case_id: string;
             /** Claim Id */
@@ -2885,6 +2951,35 @@ export interface operations {
             };
         };
     };
+    revoke_auth_revoke_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Amyna-Patient-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     start_session_auth_session_post: {
         parameters: {
             query?: never;
@@ -2969,6 +3064,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CaseDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_authorization_recording_cases__case_id__authorization_recording_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthorizationRecordingIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthorizationRecordingOut"];
                 };
             };
             /** @description Validation Error */
@@ -3085,7 +3215,10 @@ export interface operations {
     };
     get_notifications_cases__case_id__notifications_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description ISO-8601 timestamp cursor ([3.2]): return only notifications created after it. The same-millisecond edge is the client's to dedup (Relay already does, by id). */
+                since?: string | null;
+            };
             header?: never;
             path: {
                 case_id: string;

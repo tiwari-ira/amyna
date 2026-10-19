@@ -162,3 +162,42 @@ def test_asi_one_never_adopts_a_signed_in_patients_case(
         headers=fetch,
     ).json()
     assert found["created"] is True and found["case"]["case_id"] != owned["case_id"]
+
+
+# ------------------------------------------------------------------ [2.2] expiry
+
+
+def test_patient_sessions_expire_but_active_ones_slide_forward(client: TestClient) -> None:
+    from datetime import timedelta
+
+    from app.models_db import PatientSessionRow
+    from app.services.identity_service import _hash, resolve_session_user
+
+    mary = _session(client, "relay:mary")
+    container = client.app.state.container  # type: ignore[attr-defined]
+    with container.session_scope() as db:
+        user = resolve_session_user(db, mary["patient_token"])
+        assert user is not None and user.id == mary["user_id"]
+        row = db.get(PatientSessionRow, _hash(mary["patient_token"]))
+        assert row is not None and row.expires_at is not None
+        row.expires_at = row.expires_at - timedelta(hours=25)  # past the window
+    with container.session_scope() as db:
+        assert resolve_session_user(db, mary["patient_token"]) is None
+
+
+def test_revoked_tokens_are_worthless(client: TestClient) -> None:
+    from app.services.identity_service import resolve_session_user
+
+    mary = _session(client, "relay:mary")
+    container = client.app.state.container  # type: ignore[attr-defined]
+    revocation = client.post("/auth/revoke", headers={PATIENT_TOKEN_HEADER: mary["patient_token"]})
+    assert revocation.status_code == 204
+    with container.session_scope() as db:
+        assert resolve_session_user(db, mary["patient_token"]) is None
+
+
+def test_revoke_is_idempotent_and_tells_nothing(client: TestClient) -> None:
+    unknown = client.post("/auth/revoke", headers={PATIENT_TOKEN_HEADER: "pt_unknown"})
+    assert unknown.status_code == 204
+    missing = client.post("/auth/revoke")
+    assert missing.status_code == 204

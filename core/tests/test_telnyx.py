@@ -172,9 +172,7 @@ def test_transfer_to_sip_targets_xai_and_carries_the_call_id() -> None:
     _adapter(handler).transfer_to_sip("cc_1", "call_123")
     assert captured["path"] == "/v2/calls/cc_1/actions/transfer"
     assert captured["body"]["to"] == "sip:test@sip.x.ai"
-    assert captured["body"]["custom_headers"] == [
-        {"name": "X-Amyna-Call-Id", "value": "call_123"}
-    ]
+    assert captured["body"]["custom_headers"] == [{"name": "X-Amyna-Call-Id", "value": "call_123"}]
     assert from_client_state(captured["body"]["client_state"]) == "call_123"
 
 

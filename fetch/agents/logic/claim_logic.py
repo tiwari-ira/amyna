@@ -23,6 +23,11 @@ from intelligence.codes.resolver import CodeResolver, default_resolver
 from intelligence.discrepancy.engine import EngineConfig, analyze_claim
 from intelligence.policy_rag.retrieve import PolicyRetriever, cite_findings, default_retriever
 
+# Shared across every claim analysis (mock, in-process and Bureau alike):
+# spinning up a fresh 3-worker executor per request costs ~1ms of pure latency
+# and churns 3 threads each time; the pool is process-global and bounded.
+_RECORDS_POOL = ThreadPoolExecutor(max_workers=9, thread_name_prefix="claim-records")
+
 log = logging.getLogger("claimshield.agents.claim")
 #: Error prefix Core maps to ``finchnode_records_unavailable`` (retry later; nothing recorded).
 RECORDS_UNAVAILABLE = "records_unavailable"
@@ -83,17 +88,18 @@ def _pull_patient_records(
     records: list = []
     failed: list[str] = []
     gaps: dict[str, str] = {}
-    with ThreadPoolExecutor(max_workers=3, thread_name_prefix="claim-records") as pool:
-        futures = {name: pool.submit(fn) for name, fn in pulls.items()}
-        for name, future in futures.items():
-            try:
-                result = future.result()
-            except CoreToolError:
-                failed.append(name)
-                continue
-            records.extend(result.records)
-            if not result.complete:
-                gaps[name] = result.gap or "incomplete"
+    # Shared process-global pool (never shut down): submit without `with`,
+    # which would close the pool after the first request.
+    futures = {name: _RECORDS_POOL.submit(fn) for name, fn in pulls.items()}
+    for name, future in futures.items():
+        try:
+            result = future.result()
+        except CoreToolError:
+            failed.append(name)
+            continue
+        records.extend(result.records)
+        if not result.complete:
+            gaps[name] = result.gap or "incomplete"
     return records, failed, gaps
 
 
